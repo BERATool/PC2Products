@@ -1,0 +1,34 @@
+# run: conda env create -n PC2Products -f environment.yml -q
+
+# name: PC2Products
+channels:
+  - nodefaults
+  - conda-forge
+  - appliedgrg
+dependencies:
+  - python=3.12
+  - dask
+  - gdal>=3.12,<4
+  - geopandas
+  - networkit
+  - numpy>=1.26,<2.4
+  - pandas
+  - pyogrio>=0.12
+  - pyqt
+  - rasterio>=1.5
+  - scikit-image>=0.24.0
+  - tqdm
+  - xarray-spatial
+  - pandarallel
+  - tabulate
+  - igraph
+  - psutil
+  - hydra-core
+  - pytest
+  - pytest-qt
+  - pip
+  # R only: the tools install the R packages they need (lidR, terra, sf, ...) into this R on first use
+  - r-base>=4.5,<4.6
+  - pip:
+      # conda-forge has no win-64 rpy2 build for R 4.5, so install it from PyPI
+      - rpy2
