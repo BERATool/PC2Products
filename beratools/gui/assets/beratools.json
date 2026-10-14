@@ -201,6 +201,15 @@
                                   "default": "tin",
                                   "output": false,
                                   "optional": false
+                          },
+                          {   "variable": "cell_size",
+                                  "label": "Output raster cell size.",
+                                  "description": "Define the output cell size.(in meter).\n Input 0 for cell size calculated from LiDAR data.",
+                                  "type": "number",
+                                  "subtype": "float",
+                                  "default": 0.0,
+                                  "output": false,
+                                  "optional": true
                           }
                       ]
                   },
@@ -243,6 +252,15 @@
                                   "default": "tin",
                                   "output": false,
                                   "optional": false
+                          },
+                          {   "variable": "cell_size",
+                                  "label": "Output raster cell size.",
+                                  "description": "Define the output cell size.(in meter).\n Input 0 for cell size calculated from LiDAR data.",
+                                  "type": "number",
+                                  "subtype": "float",
+                                  "default": 0.0,
+                                  "output": false,
+                                  "optional": true
                           }
                       ]
                   },
