@@ -41,7 +41,7 @@ def available_cpu_cores():
 
 # Integration arguments: each tool uses original inputs
 @pytest.fixture
-def tool_arguments_integration(testdata_dir, available_cpu_cores):
+def tool_r_arguments_integration(testdata_dir, available_cpu_cores):
     return {
         "args_rpy_dtm": {
             "in_las_folder": f"{testdata_dir.joinpath('LiDAR').as_posix()}",
@@ -91,7 +91,7 @@ def tool_arguments_integration(testdata_dir, available_cpu_cores):
 
 # Workflow arguments: chained outputs
 @pytest.fixture
-def tool_arguments_workflow(testdata_dir, available_cpu_cores):
+def tool_arguments_r_workflow(testdata_dir, available_cpu_cores):
     return {
         "args_classify_gnd_csf":{
             "in_las_folder": f"{testdata_dir.joinpath('LiDAR').as_posix()}",
@@ -163,13 +163,20 @@ def classified_output_dir(testdata_dir):
     return testdata_dir.joinpath("LiDAR", "Classified_PC")
 
 @pytest.fixture
-def cleanup_output_files(test_output_files, raster_output_dir,classified_output_dir):
+def normalized_output_dir(testdata_dir):
+    return testdata_dir.joinpath("LiDAR", "Normalized_PC")
+
+
+@pytest.fixture
+def cleanup_output_files(test_output_files, raster_output_dir,classified_output_dir,normalized_output_dir):
     """Fixture to clean up generated output files after the test."""
     yield  # Yield here allows the test to run first
     time.sleep(1)  # Wait a little to allow file system operations to complete
     # R tool outputs (tiles, merged rasters, VRTs); temp.txt keeps the folder tracked in git
     raster_outputs = [ f for f in raster_output_dir.glob("*") if f.is_file() ]
     pc_outputs = [f for f in classified_output_dir.glob("*") if f.is_file()
+                  and f.name and (f.suffix == ".las" or f.suffix == ".laz")]
+    pc_outputs =pc_outputs+ [f for f in normalized_output_dir.glob("*") if f.is_file()
                   and f.name and (f.suffix == ".las" or f.suffix == ".laz")]
     for file_path in [*test_output_files, *raster_outputs,*pc_outputs]:
         if file_path.exists():
