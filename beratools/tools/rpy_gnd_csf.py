@@ -35,9 +35,9 @@ def rpy_gnd_csf(in_las_folder,
     # Defining the R script and loading the instance in Python
     r_common.r['source'](Beratools_R_script)
 
-    is_classified = bool(r_common.robjects.globalenv['detect_ground_classified'](in_las_folder)[0])
-    rest=False
-    if is_classified:
+    is_gnd_classified = [list(r_item)[0] for r_item in r_common.robjects.globalenv['detect_class'](in_las_folder, 2)]
+    rest = False
+    if not False in is_gnd_classified:
         rest=True
         print("Classified LiDAR data detected, process will rest and overwrite existing PC...")
     else:
