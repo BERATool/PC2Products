@@ -6,11 +6,12 @@ las_info <- function(in_las_folder, rprocesses)
     library(sf)
     library(units)
 
-    plan(multisession, workers = rprocesses)
+    plan(multisession, workers = max(1, floor(rprocesses / 2)))
     set_lidr_threads(rprocesses)
 
     print("Loading LiDAR data...")
-
+    cat(sprintf("R_PROGRESS:%d\n",round(0.20 * 100)))
+    flush.console()
     ctg <- readLAScatalog(
         in_las_folder,
         filter = "-drop_class 7"
@@ -98,7 +99,8 @@ las_info <- function(in_las_folder, rprocesses)
             length(ctg@data$filename)
         )
     )
-
+    cat(sprintf("R_PROGRESS:%d\n",round(0.50 * 100)))
+    flush.console()
     # Normalization check
     las <- readLAS(ctg@data$filename[1])
 
@@ -142,7 +144,8 @@ las_info <- function(in_las_folder, rprocesses)
             round(max(las$Z), 2)
         )
     )
-
+    cat(sprintf("R_PROGRESS:%d\n",round(1.0 * 100)))
+    flush.console()
     plan(sequential)
 }
 #########################################################################################
@@ -153,25 +156,30 @@ dtm_by_tin <- function(in_las_folder, out_folder, cell_size, rprocesses) {
     library(future)
     library(tools)
 
-    if (cell_size < 1.0) { rprocesses = rprocesses / 2 }
-    plan(multisession, workers = rprocesses)
+    if (cell_size < 1.0) { rprocesses =max(1, floor(rprocesses / 2)) }
+    plan(multisession, workers = max(1, floor(rprocesses / 2)))
+    on.exit(plan(sequential), add = TRUE)
     set_lidr_threads(rprocesses)
 
     ctg <- readLAScatalog(in_las_folder, filter = '-drop_class 7')
     print("Generate DTM...")
-    opt_output_files(ctg) <- opt_output_files(ctg) <- paste0(out_folder, "/{*}_TIN_DTM")
+    cat(sprintf("R_PROGRESS:%d\n",round(0.20 * 100)))
+    flush.console()
+    opt_output_files(ctg) <- paste0(out_folder, "/{*}_TIN_DTM")
     ctg@output_options$
       drivers$
       SpatRaster$
       param$
       overwrite <- TRUE
-    #         ctg@output_options$drivers$Raster$param$overwrite <- TRUE
+    ctg@output_options$drivers$Raster$param$overwrite <- TRUE
     opt_progress(ctg) <- TRUE
     dtm <- rasterize_terrain(ctg, res = cell_size, algorithm = tin())
-
+    cat(sprintf("R_PROGRESS:%d\n",round(0.80 * 100)))
+    flush.console()
     mosaic_catalog_outputs(ctg,out_folder,"_TIN_DTM.tif","Merged_TIN_DTM.tif")
-
-    # reset R mutilsession back to default
+    cat(sprintf("R_PROGRESS:%d\n",round(0.99 * 100)))
+    flush.console()
+    # reset R multisession back to default
     plan(sequential)
 }
 
@@ -183,10 +191,13 @@ dtm_by_knnidw <- function(in_las_folder, out_folder, cell_size, rprocesses) {
     library(future)
     library(tools)
 
-    plan(multisession, workers = rprocesses)
+    plan(multisession, workers = max(1, floor(rprocesses / 2)))
+    on.exit(plan(sequential), add = TRUE)
     set_lidr_threads(rprocesses)
 
     ctg <- readLAScatalog(in_las_folder, filter = '-drop_class 7')
+    cat(sprintf("R_PROGRESS:%d\n",round(0.20 * 100)))
+    flush.console()
     print("Generate DTM...")
     opt_output_files(ctg) <- opt_output_files(ctg) <- paste0(out_folder, "/{*}_IDW_DTM")
     ctg@output_options$
@@ -197,10 +208,12 @@ dtm_by_knnidw <- function(in_las_folder, out_folder, cell_size, rprocesses) {
     ctg@output_options$drivers$Raster$param$overwrite <- TRUE
     opt_progress(ctg) <- TRUE
     dtm <- rasterize_terrain(ctg, res = cell_size, algorithm = knnidw())
-
+    cat(sprintf("R_PROGRESS:%d\n",round(0.80 * 100)))
+    flush.console()
     mosaic_catalog_outputs(ctg,out_folder,"_IDW_DTM.tif","Merged_IDW_DTM.tif")
-
-    # reset R mutilsession back to default
+    cat(sprintf("R_PROGRESS:%d\n",round(0.99 * 100)))
+    flush.console()
+    # reset R multisession back to default
     plan(sequential)
 }
 
@@ -211,11 +224,14 @@ dtm_by_kriging <- function(in_las_folder, out_folder, cell_size, rprocesses) {
     library(terra)
     library(future)
     library(tools)
-    if (cell_size < 1.0) { rprocesses = rprocesses / 2 }
+    if (cell_size < 1.0) { rprocesses = max(1, floor(rprocesses / 2)) }
     plan(multisession, workers = rprocesses)
+    on.exit(plan(sequential), add = TRUE)
     set_lidr_threads(rprocesses)
 
     ctg <- lidR::readLAScatalog(in_las_folder, filter = '-drop_class 7')
+    cat(sprintf("R_PROGRESS:%d\n",round(0.20 * 100)))
+    flush.console()
     print("Generate DTM...")
     opt_output_files(ctg) <- opt_output_files(ctg) <- paste0(out_folder, "/{*}_K_DTM")
     ctg@output_options$
@@ -226,11 +242,13 @@ dtm_by_kriging <- function(in_las_folder, out_folder, cell_size, rprocesses) {
     ctg@output_options$drivers$Raster$param$overwrite <- TRUE
     opt_progress(ctg) <- TRUE
     dtm <- lidR::rasterize_terrain(ctg, res = cell_size, algorithm = kriging())
-
+    cat(sprintf("R_PROGRESS:%d\n",round(0.80 * 100)))
+    flush.console()
     mosaic_catalog_outputs(ctg,out_folder,"_K_DTM.tif","Merged_K_DTM.tif")
-
     print("Generate DTM...Done")
-    # reset R mutilsession back to default
+    cat(sprintf("R_PROGRESS:%d\n",round(0.99 * 100)))
+    flush.console()
+    # reset R multisession back to default
     plan(sequential)
 
 
@@ -244,13 +262,15 @@ pd2cellsize <- function(in_las_folder, rprocesses)
     library(sf)
     library(units)
 
-    plan(multisession, workers = rprocesses)
+    plan(multisession, workers = max(1, floor(rprocesses / 2)))
+    on.exit(plan(sequential), add = TRUE)
     set_lidr_threads(rprocesses)
 
     print(
         "Calculate output's raster average cell size from point density..."
     )
-
+    cat(sprintf("R_PROGRESS:%d\n",round(0.20 * 100)))
+    flush.console()
     if (
         lidR::is(in_las_folder, "LAS") ||
         lidR::is(in_las_folder, "LAScatalog")
@@ -265,7 +285,8 @@ pd2cellsize <- function(in_las_folder, rprocesses)
             filter = "-drop_class 7"
         )
     }
-
+    cat(sprintf("R_PROGRESS:%d\n",round(0.50 * 100)))
+    flush.console()
     crs_info <- sf::st_crs(ctg)
 
     map_units <- "Unknown"
@@ -296,7 +317,8 @@ pd2cellsize <- function(in_las_folder, rprocesses)
     )
 
     plan(sequential)
-
+    cat(sprintf("R_PROGRESS:%d\n",round(0.99 * 100)))
+    flush.console()
     return(
         list(
             cell_size = cell_size,
@@ -307,22 +329,25 @@ pd2cellsize <- function(in_las_folder, rprocesses)
 }
 
 #########################################################################################
-chm_by_dsmtin <- function(in_las_folder, out_folder, cell_size, is_normalized, rprocesses) {
+chm_dsm_by_tin <- function(in_las_folder, out_folder, cell_size, is_normalized, rprocesses) {
     library(lidR)
     library(terra)
     library(future)
     library(tools)
 
-    plan(multisession, workers = rprocesses)
+    plan(multisession, workers = max(1, floor(rprocesses / 2)))
+    on.exit(plan(sequential), add = TRUE)
     set_lidr_threads(rprocesses)
 
     ctg <- readLAScatalog(in_las_folder, filter = '-drop_class 7')
+    cat(sprintf("R_PROGRESS:%d\n",round(0.20 * 100)))
+    flush.console()
     if (is_normalized) {
         print("Generating CHM using TIN...")
-        opt_output_files(ctg) <- opt_output_files(ctg) <- paste0(out_folder, "/{*}_TIN_CHM") }
+        opt_output_files(ctg) <- paste0(out_folder, "/{*}_TIN_CHM") }
     else {
         print("Generating DSM using TIN...")
-        opt_output_files(ctg) <- opt_output_files(ctg) <- paste0(out_folder, "/{*}_TIN_DSM") }
+        opt_output_files(ctg) <- paste0(out_folder, "/{*}_TIN_DSM") }
 
     ctg@output_options$
       drivers$
@@ -332,35 +357,41 @@ chm_by_dsmtin <- function(in_las_folder, out_folder, cell_size, is_normalized, r
     ctg@output_options$drivers$Raster$param$overwrite <- TRUE
     opt_progress(ctg) <- TRUE
     chm <- lidR::rasterize_canopy(ctg, cell_size, dsmtin(max_edge = (3 * cell_size)), pkg = "terra")
-
-     if (is_normalized) {
-        mosaic_catalog_outputs(ctg,out_folder,"_TIN_CHM.tif","Merged_TIN_CHM.tif")}
+    cat(sprintf("R_PROGRESS:%d\n",round(0.80 * 100)))
+    flush.console()
+    if (is_normalized) {
+        mosaic_catalog_outputs(ctg,out_folder,"_TIN_CHM.tif","Merged_TIN_CHM.tif")
+        print("Generating CHM using TIN...Done")}
     else {
-        mosaic_catalog_outputs(ctg,out_folder,"_TIN_DSM.tif","Merged_TIN_DSM.tif")}
-
-    # reset R mutilsession back to default
+        mosaic_catalog_outputs(ctg,out_folder,"_TIN_DSM.tif","Merged_TIN_DSM.tif")
+        print("Generating DSM using TIN...Done")}
+    cat(sprintf("R_PROGRESS:%d\n",round(0.99 * 100)))
+    flush.console()
+    # reset R multisession back to default
     plan(sequential)
 }
 
 #########################################################################################
-chm_by_pitfree <- function(in_las_folder, out_folder, cell_size, is_normalized, rprocesses) {
+chm_dsm_by_pitfree <- function(in_las_folder, out_folder, cell_size, is_normalized, rprocesses) {
 
     library(lidR)
     library(terra)
     library(future)
     library(tools)
 
-    plan(multisession, workers = rprocesses)
+    plan(multisession, workers = max(1, floor(rprocesses / 2)))
+    on.exit(plan(sequential), add = TRUE)
     set_lidr_threads(rprocesses)
 
     ctg <- readLAScatalog(in_las_folder, filter = '-drop_class 7 -drop_overlap')
-
+    cat(sprintf("R_PROGRESS:%d\n",round(0.2 * 100)))
+    flush.console()
     if (is_normalized) {
         print("Generate CHM using Pit-free...")
-        opt_output_files(ctg) <- opt_output_files(ctg) <- paste0(out_folder, "/{*}_PitF_CHM") }
+        opt_output_files(ctg) <- paste0(out_folder, "/{*}_PitF_CHM") }
     else {
         print("Generate DSM using Pit-free...")
-        opt_output_files(ctg) <- opt_output_files(ctg) <- paste0(out_folder, "/{*}_PitF_DSM") }
+        opt_output_files(ctg) <- paste0(out_folder, "/{*}_PitF_DSM") }
 
     ctg@output_options$
       drivers$
@@ -370,12 +401,17 @@ chm_by_pitfree <- function(in_las_folder, out_folder, cell_size, is_normalized, 
     ctg@output_options$drivers$Raster$param$overwrite <- TRUE
     opt_progress(ctg) <- TRUE
     chm <- rasterize_canopy(ctg, cell_size, pitfree(thresholds = c(0, 3, 5, 10, 15, 20), max_edge = c(0, 3 * cell_size), subcircle = (cell_size)))
-
-     if (is_normalized) {
-        mosaic_catalog_outputs(ctg,out_folder,"_PitF_CHM.tif","Merged_PitF_CHM.tif")}
+    cat(sprintf("R_PROGRESS:%d\n",round(0.8 * 100)))
+    flush.console()
+    if (is_normalized) {
+        mosaic_catalog_outputs(ctg,out_folder,"_PitF_CHM.tif","Merged_PitF_CHM.tif")
+        print("Generate CHM using Pit-free...Done")}
     else {
-        mosaic_catalog_outputs(ctg,out_folder,"_PitF_DSM.tif","Merged_PitF_DSM.tif")}
-   # reset R mutilsession back to default
+        mosaic_catalog_outputs(ctg,out_folder,"_PitF_DSM.tif","Merged_PitF_DSM.tif")
+        print("Generate DSM using Pit-free...Done")}
+    cat(sprintf("R_PROGRESS:%d\n",round(0.99 * 100)))
+    flush.console()
+   # reset R multisession back to default
     plan(sequential)
 
 }
@@ -464,12 +500,14 @@ hh_function <- function(in_las_folder,out_folder, cell_size, Smooth_by, Min_ws, 
     library(sf)
     library(future)
 
-    plan(multisession, workers = rprocesses)
+    plan(multisession, workers = max(1, floor(rprocesses / 2)))
+    on.exit(plan(sequential), add = TRUE)
     set_lidr_threads(rprocesses)
 
     print('Generating Hummock/ Hollow Raster ...')
     ctg <- readLAScatalog(in_las_folder, select = 'xyzc', filter = '-drop_class 7')
-
+    cat(sprintf("R_PROGRESS:%d\n",round(0.2 * 100)))
+    flush.console()
     HH_raster <- function(chunk, radius, cell_size, lawn_range, Smooth_by)
     {
         if (inherits(chunk, "LAS")) {
@@ -532,6 +570,8 @@ hh_function <- function(in_las_folder,out_folder, cell_size, Smooth_by, Min_ws, 
       param$
       overwrite <- TRUE
     opt_stop_early(ctg) <- TRUE
+    cat(sprintf("R_PROGRESS:%d\n",round(0.8 * 100)))
+    flush.console()
     # Min_ws is the diameter of the circular moving window; focalMat() takes its radius
     out <- catalog_apply(ctg, HH_raster, radius = Min_ws / 2, cell_size = cell_size, lawn_range = lawn_range, Smooth_by = Smooth_by)
     chh_files <- list.files(
@@ -562,8 +602,10 @@ hh_function <- function(in_las_folder,out_folder, cell_size, Smooth_by, Min_ws, 
                   paste0("Merged_HH_", Smooth_by, "_", Min_ws, "m.tif")),
         overwrite = TRUE
     )
-
-    # reset R mutilsession back to default
+    cat(sprintf("R_PROGRESS:%d\n",round(0.99 * 100)))
+    flush.console()
+    # reset R multisession back to default
+    print('Generating Hummock/ Hollow Raster ...Done')
     plan(sequential)
 
 }
@@ -576,34 +618,46 @@ classify_gnd_csf <- function(in_las_folder, out_folder, slope, class_threshold, 
     library(RCSF)
 
     print("loading LiDAR Data")
-    plan(multisession, workers = rprocesses)
+    plan(multisession, workers = max(1, floor(rprocesses / 2)))
+    on.exit(plan(sequential), add = TRUE)
     set_lidr_threads(rprocesses)
 
     ctg <- readLAScatalog(in_las_folder, filter = '-drop_class 7 -drop_overlap')
+    cat(sprintf("R_PROGRESS:%d\n",round(0.2 * 100)))
+    flush.console()
     opt_output_files(ctg) <- paste0(out_folder, "/{*}_gnd_classified")
     opt_laz_compression(ctg) <- FALSE
     gnd_csf <- csf(slope, class_threshold = class_threshold, cloth_resolution = cloth_resolution, rigidness = rigidness, iterations = 500, time_step = 0.65)
     print("Classify ground start....")
+    cat(sprintf("R_PROGRESS:%d\n",round(0.5 * 100)))
+    flush.console()
     if (rest == TRUE) {suppressMessages({
     c_ctg <- classify_ground(ctg, gnd_csf)})
     }
     else{c_ctg <- classify_ground(ctg, gnd_csf)}
+    cat(sprintf("R_PROGRESS:%d\n",round(0.99 * 100)))
+    flush.console()
 }
 ############################################################################################
-detect_ground_classified <- function(in_las_folder)
+detect_class <- function(in_las_folder,class)
 {
     library(lidR)
+    ctg <- readLAScatalog(in_las_folder)
 
-    las <- readLAS(
-        list.files(
-            in_las_folder,
-            pattern = "\\.la(s|z)$",
-            full.names = TRUE
-        )[1]
-    )
+    check_each_tile_has_class<-function(chunk,class)
+    {
+        las<-readLAS(chunk)
+        if (is.empty(las)){ return(NULL)}
+        result<-filter_poi(las,Classification==class)
+        if (is.empty(result)){ return(FALSE)}
+        return(TRUE)
+    }
+    opt_select(ctg) <- "c"
+    result_list<-catalog_apply(ctg,check_each_tile_has_class,class=class)
+    return(result_list)
 
-    any(las$Classification == 2)
 }
+
 ############################################################################################
 # Seismic line disturbance analysis
 # Adapted from the analysis script of Chan, Dabros & McDermid (2026), "Microtopographic and
@@ -1119,16 +1173,24 @@ normalized_lidar_knnidw <- function(in_las_folder, out_folder, rprocesses) {
     library(lidR)
     library(future)
 
-    plan(multisession, workers = rprocesses)
+    plan(multisession, workers = max(1, floor(rprocesses / 2)))
+    on.exit(plan(sequential), add = TRUE)
     set_lidr_threads(rprocesses)
 
     #read Las file and drop any noise from the point cloud
     ctg <- readLAScatalog(in_las_folder, filter = '-drop_class 7')
-    opt_output_files(ctg) <- opt_output_files(ctg) <- paste0(out_folder, "/Normalized_PC/n_{*}")
+    cat(sprintf("R_PROGRESS:%d\n",round(0.2 * 100)))
+    flush.console()
+    opt_output_files(ctg) <- opt_output_files(ctg) <- paste0(out_folder, "/n_{*}")
     print("Normalize lidar data...")
     opt_progress(ctg) <- TRUE
+    cat(sprintf("R_PROGRESS:%d\n",round(0.5 * 100)))
+    flush.console()
     n_las <- normalize_height(ctg, algorithm = knnidw())
-    # reset R mutilsession back to default
+    cat(sprintf("R_PROGRESS:%d\n",round(0.99 * 100)))
+    flush.console()
+    print("Normalize lidar data...Done")
+    # reset R multisession back to default
     plan(sequential)
 }
 
@@ -1138,17 +1200,24 @@ normalized_lidar_tin <- function(in_las_folder, out_folder, rprocesses) {
     library(lidR)
     library(future)
 
-    plan(multisession, workers = rprocesses)
+    plan(multisession, workers = max(1, floor(rprocesses / 2)))
+    on.exit(plan(sequential), add = TRUE)
     set_lidr_threads(rprocesses)
 
     #read Las file and drop any noise from the point cloud
     ctg <- readLAScatalog(in_las_folder, filter = '-drop_class 7')
+    cat(sprintf("R_PROGRESS:%d\n",round(0.2 * 100)))
+    flush.console()
     opt_output_files(ctg) <- opt_output_files(ctg) <- paste0(out_folder, "/n_{*}")
     print("Normalize lidar data...")
     opt_progress(ctg) <- TRUE
-
+    cat(sprintf("R_PROGRESS:%d\n",round(0.5 * 100)))
+    flush.console()
     n_las <- normalize_height(ctg, algorithm = tin())
-    # reset R mutilsession back to default
+    # reset R multisession back to default
+    cat(sprintf("R_PROGRESS:%d\n",round(0.99 * 100)))
+    flush.console()
+    print("Normalize lidar data...Done")
     plan(sequential)
 }
 
@@ -1158,16 +1227,23 @@ normalized_lidar_kriging <- function(in_las_folder, out_folder, rprocesses) {
     library(lidR)
     library(future)
 
-    plan(multisession, workers = rprocesses)
+    plan(multisession, workers = max(1, floor(rprocesses / 2)))
+    on.exit(plan(sequential), add = TRUE)
     set_lidr_threads(rprocesses)
-
+    cat(sprintf("R_PROGRESS:%d\n",round(0.2 * 100)))
+    flush.console()
     #read Las file and drop any noise from the point cloud
     ctg <- readLAScatalog(in_las_folder, filter = '-drop_class 7')
-    opt_output_files(ctg) <- opt_output_files(ctg) <- paste0(out_folder, "/Normalized_PC/n_{*}")
+    cat(sprintf("R_PROGRESS:%d\n",round(0.5 * 100)))
+    flush.console()
+    opt_output_files(ctg) <- opt_output_files(ctg) <- paste0(out_folder, "/n_{*}")
     print("Normalize lidar data...")
     opt_progress(ctg) <- TRUE
     n_las <- normalize_height(ctg, algorithm = kriging())
-    # reset R mutilsession back to default
+    cat(sprintf("R_PROGRESS:%d\n",round(0.99 * 100)))
+    flush.console()
+    print("Normalize lidar data...Done")
+    # reset R multisession back to default
     plan(sequential)
 }
 
