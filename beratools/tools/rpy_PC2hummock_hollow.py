@@ -38,18 +38,29 @@ def rpy_hh2raster(in_las_folder,
     r_common.r['source'](Beratools_R_script)
 
     if cell_size == 0.0:
-        find_cellsize_algorith=r_common.robjects.globalenv['pd2cellsize']
-        results=find_cellsize_algorith(in_las_folder,rprocesses)
+        print("[INFO] No cell size given, the cell size will be estimated from the LiDAR data.")
+        from rpy2.rinterface_lib import callbacks
+        old_print = callbacks.consolewrite_print
+        old_warn = callbacks.consolewrite_warnerror
+        try:
+            callbacks.consolewrite_print = lambda x: None
+            callbacks.consolewrite_warnerror = lambda x: None
+            find_cellsize_algorithm = r_common.robjects.globalenv['pd2cellsize']
+            results = find_cellsize_algorithm(in_las_folder, rprocesses)
+        finally:
+            callbacks.consolewrite_print = old_print
+            callbacks.consolewrite_warnerror = old_warn
         cell_size=float(results.rx2("cell_size")[0])
         map_units = str(results.rx2("map_units")[0])
 
-    is_classified = bool(r_common.robjects.globalenv['detect_ground_classified'](in_las_folder)[0])
+    is_gnd_classified = [list(r_item)[0] for r_item in r_common.robjects.globalenv['detect_class'](in_las_folder, 2)]
 
-    if is_classified:
-        hh_function_algorith=r_common.robjects.globalenv['hh_function']
-        hh_function_algorith(in_las_folder,out_folder, float(cell_size), Smooth_by, float(Min_ws), float(lawn_range), rprocesses)
+    if not False in is_gnd_classified:
+        hh_function_algorithm=r_common.robjects.globalenv['hh_function']
+        hh_function_algorithm(in_las_folder,out_folder, float(cell_size), Smooth_by, float(Min_ws), float(lawn_range), rprocesses)
     else:
-        print("Warning! The LiDAR data is not classified, please run ground classification first.")
+        print("[Warning!] The LiDAR data is not classified, please run ground classification first.")
+        exit()
 
 
 if __name__ == '__main__':
