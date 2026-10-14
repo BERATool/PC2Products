@@ -55,12 +55,29 @@ def initialize_r():
 
     if r is not None:
         return
+    import logging
+#   suppresses output only during the import/startup phase,
+#   then restores normal printing for the rest of the test run.
+    logging.getLogger("rpy2").setLevel(logging.CRITICAL)
+    logging.getLogger("rpy2.situation").disabled = True
+    logging.getLogger("rpy2.rinterface_lib").disabled = True
+    logging.getLogger("rpy2.rinterface_lib.embedded").disabled = True
 
+    from rpy2.rinterface_lib import callbacks
+
+    orig_print = callbacks.consolewrite_print
+    orig_warn = callbacks.consolewrite_warnerror
+
+    callbacks.consolewrite_print = lambda x: None
+    callbacks.consolewrite_warnerror = lambda x: None
+
+    robjects_module = _import_robjects()
+
+    callbacks.consolewrite_print = orig_print
+    callbacks.consolewrite_warnerror = orig_warn
     # Locate R, set up its DLL path and isolate its library before rpy2 starts R,
     # whichever module calls first.
     import beratools.tools.r_interface  # noqa: F401
-
-    robjects_module = _import_robjects()
 
     robjects = robjects_module
     r = robjects.r
@@ -97,7 +114,7 @@ def r_processes(processes):
 
 def check_las_files_existence(folder):
     if not os.path.exists(folder):
-        print("Error! Cannot locate LiDAR folder, please check.")
+        print(f"Error! Cannot locate LiDAR folder({folder}), please check.")
         exit()
     else:
         found = False
@@ -106,7 +123,8 @@ def check_las_files_existence(folder):
                 found = True
                 break
         if not found:
-            raise FileNotFoundError("Error! Cannot locate input LAS/LAZ file(s), please check!")
+            print(f"Error! Cannot locate input LAS/LAZ file(s) in {folder}, please check!")
+            exit()
 
 def check_las_out_folder_existence(folder):
     if not os.path.exists(folder):
