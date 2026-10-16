@@ -1,6 +1,7 @@
 # GUI Tests (pytest-qt)
 
-Cross-platform GUI tests for BERA Tools using [pytest-qt](https://pytest-qt.readthedocs.io/).
+Cross-platform GUI tests for the PC2Products tools in the BERA Tools GUI, using
+[pytest-qt](https://pytest-qt.readthedocs.io/).
 Drives Qt widgets in-process via `qtbot` — no subprocess, no display automation required.
 
 ## Requirements
@@ -57,14 +58,14 @@ python -m pytest tests/pytest_qt/test_tool_forms.py::TestGroundCsf::test_round_t
 ## Test Files (Brief)
 
 - `tests/pytest_qt/conftest.py`: central fixtures, factories, marker registration, and shared timeout.
-- `tests/pytest_qt/test_tool_widgets.py`: focused widget behavior and signal tests, including FileSelector browse/cancel/vector-layer cases.
-- `tests/pytest_qt/test_main_window.py`: end-user interaction flows on `MainWindow` (run/cancel/exit/help/defaults/advanced), process and progress behavior, slider, and persistence.
-- `tests/pytest_qt/test_tool_forms.py`: form and validation round trips for the six rpy_* tools (DTM, CHM/DSM, LiDAR info, cell size, hummock/hollow, CSF ground classification).
+- `tests/pytest_qt/test_tool_widgets.py`: focused widget behavior and signal tests, including FileSelector browse dialogs and polygon-layer filtering. Each widget is built from a real PC2Products parameter (for example `nmax`, `grid_size`, `slope`, `rigidness`, `in_dtm`, `in_training`).
+- `tests/pytest_qt/test_main_window.py`: end-user interaction flows on `MainWindow` (run/cancel/exit/help/defaults/advanced), process and progress behavior (including `R_PROGRESS` lines), slider, and persistence.
+- `tests/pytest_qt/test_tool_forms.py`: form and validation round trips for all ten rpy_* tools (LiDAR info, cell size, CSF ground classification, normalize, DTM, CHM/DSM, hummock/hollow, surface water, depth-to-water, seismic line analysis).
 
 ## Notes
 
 - The tool names under test are listed in `ALL_TOOL_NAMES` (in `conftest.py`, `test_main_window.py` and `test_tool_widgets.py`). Keep them in step with `beratools/gui/assets/beratools.json` when tools are added or renamed.
-- Form round-trip tests use the sample tiles in `tests/data/LiDAR/` as the input folder, because validation checks that input folders exist.
+- Form round-trip tests use the sample tiles in `tests/data/LiDAR/` as the input folder, because validation checks that input folders exist. Surface water, depth-to-water and seismic line tests build their input rasters and polygons with the synthetic-data helpers in `tests/conftest.py`.
 - Skip this suite with: `python -m pytest tests/ --ignore=tests/pytest_qt`
 - FileSelector vector-layer tests patch `beratools.gui.tool_widgets.get_layers`; no real geodata files are required.
 - MainWindow help/open-url behavior is patched in tests to avoid real browser launches.

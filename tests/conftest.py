@@ -1,4 +1,4 @@
-"""Test configuration file for the BERA Tools package."""
+"""Test configuration for the PC2Products tools: sample LiDAR paths, tool arguments and synthetic inputs."""
 
 import logging
 import os
@@ -24,7 +24,6 @@ def pytest_configure(config):
     logging.getLogger("pyogrio").setLevel(logging.ERROR)
     logging.getLogger("rasterio").setLevel(logging.ERROR)
     logging.getLogger("rasterio.env").setLevel(logging.ERROR)
-    logging.getLogger("beratools.external.polygon_centerline._src").setLevel(logging.ERROR)
     logging.getLogger("pyproj").setLevel(logging.WARNING)
 
 
@@ -138,22 +137,6 @@ def tool_arguments_r_workflow(testdata_dir, available_cpu_cores):
     }
 
 
-# A test for cleaning up test output files
-@pytest.fixture
-def test_output_files(testdata_dir):
-    return [
-        testdata_dir.joinpath("integration_inter.gpkg"),
-        testdata_dir.joinpath("integration_inter_aux.gpkg"),
-        testdata_dir.joinpath("DynCanTh_integration.gpkg"),
-        testdata_dir.joinpath("DynCanTh_integration_inter.gpkg"),
-        testdata_dir.joinpath("workflow.gpkg"),
-        testdata_dir.joinpath("workflow_aux.gpkg"),
-        testdata_dir.joinpath("DynCanTh_workflow.gpkg"),
-        testdata_dir.joinpath("smooth_centerline.gpkg"),
-        testdata_dir.joinpath("footprint_rel.gpkg"),
-    ]
-
-
 @pytest.fixture
 def raster_output_dir(testdata_dir):
     return testdata_dir.joinpath("LiDAR", "Raster_Output")
@@ -168,7 +151,7 @@ def normalized_output_dir(testdata_dir):
 
 
 @pytest.fixture
-def cleanup_output_files(test_output_files, raster_output_dir,classified_output_dir,normalized_output_dir):
+def cleanup_output_files(raster_output_dir, classified_output_dir, normalized_output_dir):
     """Fixture to clean up generated output files after the test."""
     yield  # Yield here allows the test to run first
     time.sleep(1)  # Wait a little to allow file system operations to complete
@@ -178,7 +161,7 @@ def cleanup_output_files(test_output_files, raster_output_dir,classified_output_
                   and f.name and (f.suffix == ".las" or f.suffix == ".laz")]
     pc_outputs =pc_outputs+ [f for f in normalized_output_dir.glob("*") if f.is_file()
                   and f.name and (f.suffix == ".las" or f.suffix == ".laz")]
-    for file_path in [*test_output_files, *raster_outputs,*pc_outputs]:
+    for file_path in [*raster_outputs, *pc_outputs]:
         if file_path.exists():
             file_path.unlink()
             assert not file_path.exists(), f"Failed to remove {file_path}"

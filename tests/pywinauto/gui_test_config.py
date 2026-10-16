@@ -1,261 +1,152 @@
 """
 GUI test configuration: test data paths and tool parameter values.
 
-All file paths point to existing test data in tests/data/.
-Output files go to a temporary directory created per test session.
+The LiDAR tools read the sample tiles in tests/data/LiDAR/. Surface Water Mapping,
+Depth-to-Water and Seismic Line Disturbance Analysis read synthetic rasters and
+polygons built by the helpers in tests/conftest.py. Outputs go to a temporary
+directory created per test session.
+
+Parameter types and labels are read from beratools.json, so they stay in step
+with the GUI.
 """
 
+import importlib.util
+import json
 from pathlib import Path
 
-TESTDATA_DIR = Path(__file__).resolve().parents[1] / "data"
+TESTS_DIR = Path(__file__).resolve().parents[1]
+TESTDATA_DIR = TESTS_DIR / "data"
+TOOLS_JSON = TESTS_DIR.parent / "beratools" / "gui" / "assets" / "beratools.json"
+
+
+def _load_synthetic_data_helpers():
+    """Load tests/conftest.py under another name; tests/pywinauto/conftest.py shadows it."""
+    spec = importlib.util.spec_from_file_location("pc2products_test_data", TESTS_DIR / "conftest.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_tools():
+    """Return {tool name: [parameter dicts]} for every tool in beratools.json."""
+    tools = {}
+
+    def walk(node):
+        if isinstance(node, dict):
+            if "tool_api" in node and "name" in node:
+                tools[node["name"]] = node.get("parameters", [])
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    with TOOLS_JSON.open(encoding="utf-8") as f:
+        walk(json.load(f))
+    return tools
+
+
+_TOOLS = _load_tools()
+
+# Parameter type lookup from beratools.json (variable -> type info)
+PARAM_TYPES = {
+    param["variable"]: {"type": param["type"], "subtype": param.get("subtype", "")}
+    for params in _TOOLS.values()
+    for param in params
+}
+
+# Tool-specific parameter labels from beratools.json (tool -> variable -> label)
+TOOL_PARAM_LABELS = {
+    tool: {param["variable"]: param["label"] for param in params} for tool, params in _TOOLS.items()
+}
+
+ALL_TOOL_NAMES = list(_TOOLS)
 
 
 def make_test_data(testdata_dir, output_dir):
     """Build TEST_DATA dict with resolved paths.
 
     Args:
-        testdata_dir: Path to tests/data/ with existing .gpkg and .tif files.
-        output_dir: Path to a temporary output directory for test results.
+        testdata_dir: Path to tests/data/ (holds the LiDAR/ sample tiles).
+        output_dir: Path to a temporary output directory for test results; the
+            synthetic raster and polygon inputs are written there too.
     """
+    helpers = _load_synthetic_data_helpers()
+    surface_water = helpers.make_surface_water_data(output_dir / "surface_water_inputs")
+    dtw = helpers.make_dtw_data(output_dir / "dtw_inputs")
+    seismic = helpers.make_seismic_line_data(output_dir / "seismic_inputs")
+
+    las_folder = str(testdata_dir / "LiDAR")
+    raster_output = str(output_dir / "Raster_Output")
+
     return {
-        "Check Seed Lines": {
-            "in_line": {
-                "path": str(testdata_dir / "integration_aoi.gpkg"),
-                "layer": "seed_lines_checked",
-            },
-            "in_raster": {
-                "path": str(testdata_dir / "chm_aoi.tif"),
-            },
-            "chm_footprint_shrink": 15.0,
-            "clip_to_chm_footprint": True,
-            "out_line": {
-                "path": str(output_dir / "gui_test_output.gpkg"),
-                "layer": "seed_lines_checked",
-            },
-            "remove_short_lines": False,
-            "minimum_line_length": 5.0,
-            "snap_close_endpoints": False,
-            "snap_tolerance": 5.0,
-            "group_lines": False,
-            "densify_long_lines": False,
-            "max_segment_length": 500.0,
+        "LiDAR data info": {
+            "in_las_folder": las_folder,
         },
-        "Vertex Optimization": {
-            "in_line": {
-                "path": str(testdata_dir / "integration_aoi.gpkg"),
-                "layer": "seed_lines_checked",
-            },
-            "in_raster": {
-                "path": str(testdata_dir / "chm_aoi.tif"),
-            },
-            "search_distance": 5.0,
-            "line_radius": 15,
-            "out_line": {
-                "path": str(output_dir / "gui_test_output.gpkg"),
-                "layer": "seed_lines_vo",
-            },
+        "Raster Cell size from LiDAR data": {
+            "in_las_folder": las_folder,
         },
-        "Centerline": {
-            "in_line": {
-                "path": str(testdata_dir / "integration_aoi.gpkg"),
-                "layer": "seed_lines_checked",
-            },
-            "in_raster": {
-                "path": str(testdata_dir / "chm_aoi.tif"),
-            },
-            "line_radius": 15.0,
-            "proc_segments": True,
-            "out_line": {
-                "path": str(output_dir / "gui_test_output.gpkg"),
-                "layer": "centerline",
-            },
+        "Ground Classify Using CSF": {
+            "in_las_folder": las_folder,
+            "out_folder": str(output_dir / "Classified_PC"),
+            "slope": False,
+            "class_threshold": 0.3,
+            "cloth_resolution": 1.0,
+            "rigidness": 2,
         },
-        "Canopy Footprint (Absolute Threshold)": {
-            "in_line": {
-                "path": str(testdata_dir / "integration_aoi.gpkg"),
-                "layer": "centerline",
-            },
-            "in_chm": {
-                "path": str(testdata_dir / "chm_aoi.tif"),
-            },
-            "corridor_thresh": 3.0,
-            "max_ln_width": 32.0,
-            "exp_shk_cell": 0,
-            "out_footprint": {
-                "path": str(output_dir / "gui_test_output.gpkg"),
-                "layer": "footprint_abs",
-            },
+        "Normalize LiDAR Data": {
+            "in_las_folder": las_folder,
+            "out_folder": str(output_dir / "Normalized_PC"),
+            "style": "tin",
         },
-        "Canopy Footprint (Relative Threshold)": {
-            "in_line": {
-                "path": str(testdata_dir / "integration_aoi.gpkg"),
-                "layer": "centerline",
-            },
-            "in_chm": {
-                "path": str(testdata_dir / "chm_aoi.tif"),
-            },
-            "max_ln_width": 32.0,
-            "exp_shk_cell": 0,
-            "out_footprint": {
-                "path": str(output_dir / "gui_test_output.gpkg"),
-                "layer": "footprint_rel",
-            },
-            "out_centerline": {
-                "path": str(output_dir / "gui_test_output.gpkg"),
-                "layer": "smooth_centerline",
-            },
-            "off_ln_dist": 10.0,
-            "canopy_percentile": 90,
-            "canopy_thresh_percentage": 50.0,
-            "tree_radius": 1.5,
-            "max_line_dist": 1.5,
-            "canopy_avoidance": 0.0,
-            "exponent": 1,
+        "Generate DTM from LiDAR Data": {
+            "in_las_folder": las_folder,
+            "out_folder": raster_output,
+            "style": "idw",
+            "cell_size": 0.5,
         },
-        "Ground Footprint": {
-            "in_line": {
-                "path": str(testdata_dir / "integration_aoi.gpkg"),
-                "layer": "centerline",
-            },
-            "in_footprint": {
-                "path": str(testdata_dir / "integration_aoi.gpkg"),
-                "layer": "footprint_exp",
-            },
-            "n_samples": 15,
-            "offset": 30.0,
-            "max_width": True,
-            "out_footprint": {
-                "path": str(output_dir / "gui_test_output.gpkg"),
-                "layer": "footprint_ground",
-            },
+        "Generate CHM or DSM from LiDAR Data": {
+            "in_las_folder": las_folder,
+            "out_folder": raster_output,
+            "style": "pitfree",
+            "cell_size": 0.5,
         },
-        "Feature Buffer": {
-            "in_feature": {
-                "path": str(testdata_dir / "integration_aoi.gpkg"),
-                "layer": "seed_lines_checked",
-            },
-            "buffer_dist": 10.0,
-            "out_feature": {
-                "path": str(output_dir / "gui_test_output.gpkg"),
-                "layer": "buffered",
-            },
+        "Detect Hummock and Hollow from LiDAR Data": {
+            "in_las_folder": las_folder,
+            "out_folder": raster_output,
+            "Smooth_by": "median",
+            "Min_ws": 3.0,
+            "lawn_range": 0.1,
+            "cell_size": 0.3,
+        },
+        "Surface Water Mapping": {
+            "in_ortho": {"path": surface_water["ortho"]},
+            "in_training": {"path": surface_water["training"], "layer": "training"},
+            "out_folder": str(output_dir / "surface_water"),
+            "in_chm": {"path": surface_water["chm"]},
+            "max_canopy_height": 0.2,
+            "min_patch_area": 0.04,
+            "points_per_polygon": 20,
+            "seed": 1,
+            "tile_size": 2000,
+        },
+        "Depth-to-Water from Surface Water": {
+            "in_dtm": {"path": dtw["dtm"]},
+            "in_water": {"path": dtw["water"]},
+            "out_folder": str(output_dir / "dtw"),
+            "in_mask": {"path": dtw["mask"], "layer": "exclude"},
+            "grid_size": 10.0,
+            "nmax": 10,
+            "variogram_model": "Sph",
+            "kriging_cell_size": 1.0,
+            "tile_size": 1000,
+        },
+        "Seismic Line Disturbance Analysis": {
+            "in_segments": {"path": seismic["segments"], "layer": "segments"},
+            "in_dtm": {"path": seismic["dtm"]},
+            "in_microform": {"path": seismic["microform"]},
+            "out_folder": str(output_dir / "line_analysis"),
+            "in_dtw": {"path": seismic["dtw"]},
+            "significance": 0.05,
         },
     }
-
-
-# Parameter type lookup from beratools.json (variable -> type info)
-PARAM_TYPES = {
-    # Check Seed Lines
-    "in_line": {"type": "file", "subtype": "vector"},
-    "in_raster": {"type": "file", "subtype": "raster"},
-    "chm_footprint_shrink": {"type": "number", "subtype": "float"},
-    "clip_to_chm_footprint": {"type": "list", "subtype": "bool"},
-    "out_line": {"type": "file", "subtype": "vector"},
-    "remove_short_lines": {"type": "list", "subtype": "bool"},
-    "minimum_line_length": {"type": "number", "subtype": "float"},
-    "snap_close_endpoints": {"type": "list", "subtype": "bool"},
-    "snap_tolerance": {"type": "number", "subtype": "float"},
-    "group_lines": {"type": "list", "subtype": "bool"},
-    "densify_long_lines": {"type": "list", "subtype": "bool"},
-    "max_segment_length": {"type": "number", "subtype": "float"},
-    # Vertex Optimization
-    "search_distance": {"type": "number", "subtype": "float"},
-    "line_radius": {"type": "number", "subtype": "int"},
-    "optimize_internal_vertices": {"type": "list", "subtype": "bool"},
-    # Centerline
-    "proc_segments": {"type": "list", "subtype": "bool"},
-    # Canopy Footprint (Absolute)
-    "in_chm": {"type": "file", "subtype": "raster"},
-    "corridor_thresh": {"type": "number", "subtype": "float"},
-    "max_ln_width": {"type": "number", "subtype": "float"},
-    "exp_shk_cell": {"type": "number", "subtype": "int"},
-    "out_footprint": {"type": "file", "subtype": "vector"},
-    # Canopy Footprint (Relative)
-    "out_centerline": {"type": "file", "subtype": "vector"},
-    "off_ln_dist": {"type": "number", "subtype": "float"},
-    "canopy_percentile": {"type": "list", "subtype": "int"},
-    "canopy_thresh_percentage": {"type": "number", "subtype": "float"},
-    "tree_radius": {"type": "number", "subtype": "float"},
-    "max_line_dist": {"type": "number", "subtype": "float"},
-    "canopy_avoidance": {"type": "number", "subtype": "float"},
-    "exponent": {"type": "number", "subtype": "int"},
-    # Ground Footprint
-    "in_footprint": {"type": "file", "subtype": "vector"},
-    "n_samples": {"type": "number", "subtype": "int"},
-    "offset": {"type": "number", "subtype": "float"},
-    "max_width": {"type": "list", "subtype": "bool"},
-    # Feature Buffer
-    "in_feature": {"type": "file", "subtype": "vector"},
-    "buffer_dist": {"type": "number", "subtype": "float"},
-    "out_feature": {"type": "file", "subtype": "vector"},
-}
-
-
-# Tool-specific parameter labels from beratools.json
-TOOL_PARAM_LABELS = {
-    "Check Seed Lines": {
-        "in_line": "Seed Line",
-        "in_raster": "CHM Raster",
-        "chm_footprint_shrink": "CHM footprint shrink (m)",
-        "clip_to_chm_footprint": "Clip to CHM footprint",
-        "out_line": "Output Seed Line",
-        "remove_short_lines": "Remove short lines",
-        "minimum_line_length": "Minimum line length (m)",
-        "snap_close_endpoints": "Snap close endpoints",
-        "snap_tolerance": "Snap tolerance (m)",
-        "group_lines": "Group lines",
-        "densify_long_lines": "Densify long lines",
-        "max_segment_length": "Max segment length (m)",
-    },
-    "Vertex Optimization": {
-        "in_line": "Input Line",
-        "in_raster": "CHM Raster",
-        "search_distance": "Vertex searching distance (m)",
-        "line_radius": "Line Processing Radius",
-        "optimize_internal_vertices": "Optimize Internal Vertices",
-        "out_line": "Optimized Line",
-    },
-    "Centerline": {
-        "in_line": "Seed Line",
-        "in_raster": "CHM Raster",
-        "line_radius": "Line Processing Radius",
-        "proc_segments": "Process Segments",
-        "out_line": "Output Centerline",
-    },
-    "Canopy Footprint (Absolute Threshold)": {
-        "in_line": "Centerline",
-        "in_chm": "CHM Raster",
-        "corridor_thresh": "Corridor Threshold",
-        "max_ln_width": "Maximum Line Width (m)",
-        "exp_shk_cell": "Expand And Shrink Cell Range",
-        "out_footprint": "Output Footprint",
-    },
-    "Canopy Footprint (Relative Threshold)": {
-        "in_line": "Centerline",
-        "in_chm": "CHM Raster",
-        "max_ln_width": "Maximum Line Width",
-        "exp_shk_cell": "Expand And Shrink Cell Range",
-        "out_footprint": "Output Footprint",
-        "out_centerline": "Output Centerline",
-        "off_ln_dist": "Offset Line Distance",
-        "canopy_percentile": "Canopy Percentile",
-        "canopy_thresh_percentage": "Canopy Threshold Percentage",
-        "tree_radius": "Tree Search Radius",
-        "max_line_dist": "Maximum Line Distance",
-        "canopy_avoidance": "Canopy Avoidance",
-        "exponent": "Cost Raster Exponent",
-    },
-    "Ground Footprint": {
-        "in_line": "Centerline",
-        "in_footprint": "Input Footprint",
-        "n_samples": "Sampling number",
-        "offset": "Perpendicular line length (m)",
-        "max_width": "Use maximum width",
-        "out_footprint": "Output Ground Footprint",
-    },
-    "Feature Buffer": {
-        "in_feature": "Input Feature Class",
-        "buffer_dist": "Buffer Distance (m)",
-        "out_feature": "Output Buffered Features",
-    },
-}

@@ -4,7 +4,8 @@ GUI test fixtures: app launch/teardown and helper functions.
 Requires:
     - pywinauto: pip install pywinauto
     - A display (cannot run headless)
-    - Test data in tests/data/ (integration_aoi.gpkg, chm_aoi.tif)
+    - The sample LiDAR tiles in tests/data/LiDAR/ (raster and polygon inputs are
+      generated per session, see gui_test_config.make_test_data)
 
 Run with:
     python -m pytest tests/pywinauto/ -v -m gui
@@ -91,7 +92,7 @@ def test_data(testdata_dir, output_dir):
 
 @pytest.fixture(scope="session")
 def bera_app():
-    """Launch BERA Tools GUI and return the main window wrapper.
+    """Launch the BERA Tools GUI (which hosts the PC2Products tools) and return the main window wrapper.
 
     The app is started as a subprocess and connected via pywinauto UIA backend.
     Killed automatically after the test session ends.
@@ -461,7 +462,7 @@ def fill_tool_form(main, tool_name: str, params: dict):
         main: pywinauto main window wrapper.
         tool_name: Tool name as shown in the tree view.
         params: Dict of variable -> value. File params use
-                {"path": "...", "layer": "..."} dicts.
+                {"path": "...", "layer": "..."} dicts; folder params are plain paths.
     """
     select_tool(main, tool_name)
     _ensure_advanced_options_visible(main)
@@ -479,7 +480,7 @@ def fill_tool_form(main, tool_name: str, params: dict):
         ptype = ptype_info["type"]
         subtype = ptype_info.get("subtype", "")
 
-        if ptype == "file":
+        if ptype in ("file", "directory"):
             # value is {"path": "...", "layer": "..."} or {"path": "..."}
             if isinstance(value, dict):
                 file_path = value["path"]

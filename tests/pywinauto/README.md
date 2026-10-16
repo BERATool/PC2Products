@@ -1,15 +1,19 @@
 # GUI Tests (pywinauto)
 
-Windows-only GUI tests for BERA Tools using [pywinauto](https://pywinauto.readthedocs.io/).
-Launches the app as a subprocess and interacts via the Windows UIA automation backend.
+Windows-only GUI tests for the PC2Products tools in the BERA Tools GUI, using
+[pywinauto](https://pywinauto.readthedocs.io/). Launches the app as a subprocess and interacts via
+the Windows UIA automation backend.
 
 > For cross-platform tests, see `tests/pytest_qt/` which uses pytest-qt instead.
 
 ## Requirements
 
 - **Windows only** (pywinauto uses Windows UI Automation)
-- A display (cannot run headless)
-- Test data in `tests/data/` (`integration_aoi.gpkg`, `chm_aoi.tif`)
+- A display (cannot run headless). The tests move the mouse and type into the GUI, so don't use the
+  computer while they run.
+- The sample LiDAR tiles in `tests/data/LiDAR/`. The raster and polygon inputs for Surface Water
+  Mapping, Depth-to-Water and Seismic Line Disturbance Analysis are generated in a temporary folder
+  by the synthetic-data helpers in `tests/conftest.py`.
 
 ```bash
 pip install pywinauto
@@ -36,12 +40,12 @@ python -m pytest tests/ --ignore=tests/pywinauto
 | File | Description |
 |---|---|
 | `conftest.py` | Fixtures: `bera_app` (subprocess launch + pywinauto connect), helper functions for widget interaction |
-| `gui_test_config.py` | Test data paths, parameter type lookup, `make_test_data()` factory |
-| `test_gui_tools.py` | Window basics, tool selection, form filling per tool, file dialog, numeric/boolean/option inputs, slider, load defaults |
+| `gui_test_config.py` | Tool names, parameter types and labels read from `beratools.json`, and the `make_test_data()` factory with values for each PC2Products tool |
+| `test_gui_tools.py` | Window basics, tool selection and form filling for all ten PC2Products tools, file dialog, numeric/boolean/option inputs, slider, load defaults |
 
 ## How It Works
 
-1. `bera_app` fixture launches BERA Tools GUI as a subprocess
+1. `bera_app` fixture launches the BERA Tools GUI as a subprocess
 2. Connects via `pywinauto.Application(backend="uia")`
 3. Helper functions (`select_tool`, `fill_tool_form`, `set_numeric`, etc.) interact with widgets through the UIA control tree
 4. Tests fill forms and verify UI state — they do **not** run actual tools
@@ -51,5 +55,7 @@ python -m pytest tests/ --ignore=tests/pywinauto
 
 - Tests use the `gui` pytest marker.
 - The app signals readiness via a temp file flag (`BERA_SPLASH_READY` env var).
+- `fill_tool_form` sets file and folder parameters by typing the path into the field; only
+  `TestFileDialog` goes through the browse dialog.
 - File dialog handling supports both native Windows (`#32770`) and Qt non-native dialogs.
 - Widget identification relies on control type and index; adding `objectName` to widgets would improve reliability.

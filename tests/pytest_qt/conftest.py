@@ -1,7 +1,7 @@
 """
-pytest-qt GUI test fixtures for BERA Tools.
+pytest-qt GUI test fixtures for the PC2Products tools in the BERA Tools GUI.
 
-Cross-platform alternative to pywinauto-based tests in tests/gui/.
+Cross-platform alternative to the pywinauto-based tests in tests/pywinauto/.
 Drives Qt widgets in-process via qtbot — no subprocess, no display automation.
 
 Requires:
@@ -212,6 +212,7 @@ ALL_TOOL_NAMES = [
     "Raster Cell size from LiDAR data",
     "Detect Hummock and Hollow from LiDAR Data",
     "Ground Classify Using CSF",
+    "Normalize LiDAR Data",
     "Surface Water Mapping",
     "Depth-to-Water from Surface Water",
     "Seismic Line Disturbance Analysis",
