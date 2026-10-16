@@ -16,10 +16,14 @@ jobs:
         include:
           - python-version: "3.12"
             toxenv: py312
+            networkit: networkit
           - python-version: "3.13"
             toxenv: py313
+            networkit: networkit
+          # conda-forge has no networkit build for Python 3.14
           - python-version: "3.14"
             toxenv: py314
+            networkit: ""
 
     steps:
       - uses: actions/checkout@v6
@@ -37,7 +41,7 @@ jobs:
             dask
             gdal>=3.12,<4
             geopandas
-            networkit
+            ${{ matrix.networkit }}
             numpy>=1.26,<2.4
             pandas
             pyogrio>=0.12
@@ -47,14 +51,30 @@ jobs:
             tqdm
             xarray-spatial
             pandarallel
+            igraph
+            tabulate
+            psutil
+            hydra-core
             pytest
             pytest-qt
             tox
+            r-base>=4.5,<4.6
+            rpy2
+            r-lidr
+            r-rlas
+            r-rcsf
+            r-future
+            r-terra
+            r-sp
+            r-raster
+            r-stars
+            r-sf
+            r-gstat
           condarc: |
             channel_priority: strict
             channels:
-              - appliedgrg
               - conda-forge
+              - appliedgrg
           cache-environment: true
 
       - name: Install project
