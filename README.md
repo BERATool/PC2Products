@@ -38,7 +38,7 @@ using `Smooth_by = median`, `Min_ws = 3` and `lawn_range = 0.1`.*
 | [Ground Classify Using CSF](#ground-classify-using-csf) | `rpy_gnd_csf.py` | `rpy_gnd_csf` | `classify_gnd_csf` |
 | [Generate DTM from LiDAR Data](#generate-dtm-from-lidar-data) | `rpy_dtm_by.py` | `rpy_dtm` | `dtm_by_tin`, `dtm_by_knnidw`, `dtm_by_kriging` |
 | [Normalize LiDAR Data](#normalize-lidar-data) | `rpy_normalized_PC.py` | `rpy_normalized_PC` | `normalized_lidar_tin`, `normalized_lidar_knnidw`, `normalized_lidar_kriging` |
-| [Generate CHM or DSM from LiDAR Data](#generate-chm-or-dsm-from-lidar-data) | `rpy_CHM_DSM_by.py` | `rpy_chm_dsm` | `chm_by_dsmtin`, `chm_by_pitfree` |
+| [Generate CHM or DSM from LiDAR Data](#generate-chm-or-dsm-from-lidar-data) | `rpy_CHM_DSM_by.py` | `rpy_chm_dsm_by` | `chm_dsm_by_tin`, `chm_dsm_by_pitfree` |
 | [Detect Hummock and Hollow from LiDAR Data](#detect-hummock-and-hollow-from-lidar-data) | `rpy_PC2hummock_hollow.py` | `rpy_hh2raster` | `hh_function` |
 | [Surface Water Mapping](#surface-water-mapping) | `rpy_surface_water.py` | `rpy_surface_water` | `surface_water_map` |
 | [Depth-to-Water from Surface Water](#depth-to-water-from-surface-water) | `rpy_dtw.py` | `rpy_dtw` | `dtw_map` |
@@ -48,10 +48,10 @@ Shared helpers:
 
 | File | Contents |
 |------|----------|
-| `r_interface.py` | `configure_r_environment()`: finds R and sets up `R_HOME`, the DLL search path and `PATH` before rpy2 is imported (see [How R is located](#how-r-is-located)). |
-| `r_common.py` | Connects rpy2 on first use, and provides `r_processes`, `check_las_files_existence`, `check_las_out_folder_existence` and `check_r_packages_installation`. |
-| `common.py` | `has_raster_output` and `has_lidar_output`, used by the tests to check a tool wrote its output. |
-| `r_scripts_collection.r` | All the R processing functions, plus `detect_normalized`, `detect_ground_classified` and `mosaic_catalog_outputs`. |
+| `r_interface.py` | `configure_r_environment()`: finds R and sets up `R_HOME`, the DLL search path and `PATH` before rpy2 is imported, and puts rpy2 in ABI mode (see [How R is located](#how-r-is-located)). |
+| `r_common.py` | Connects rpy2 on first use (hiding rpy2's start-up messages), and provides `r_processes`, `r_processes_by_memory`, `check_las_files_existence`, `check_las_out_folder_existence` and `check_r_packages_installation`. |
+| `common.py` | `has_raster_output`, `has_lidar_output` and `list_files_in_folder`, used by the tests to check a tool wrote its output. `has_raster_output` takes a folder, or a list of files and an optional glob pattern such as `Merged_*_DTM.tif`. |
+| `r_scripts_collection.r` | All the R processing functions, plus `detect_normalized`, `detect_class` (whether each tile has points of a given class), `mosaic_catalog_outputs`, and the tiling helpers `run_tiles`, `use_temp_dir` and `restore_temp_dir` used by Surface Water Mapping and Depth-to-Water. |
 
 ### Typical workflow
 
@@ -80,27 +80,60 @@ Seismic Line Disturbance Analysis work on rasters instead (see their own section
 their R packages the same way:
 
 - **Input**: every `.las` / `.laz` file in `in_las_folder` is read as a lidR `LAScatalog`. If the
-  folder is missing or holds no LAS/LAZ files, the tool stops.
+  folder is missing or holds no LAS/LAZ files, the tool prints an error naming the folder and stops.
+- **Ground classification check**: the DTM and hummock/hollow tools check **every** tile with
+  `detect_class(in_las_folder, 2)`. If any tile has no ground points (class 2), they print
+  `[Warning!] The LiDAR data is not classified, please run ground classification first.` and stop.
 - **Noise removal**: points classified as low noise (class 7) are dropped with
   `filter = "-drop_class 7"`.
-- **Cell size**: the DTM and CHM/DSM tools don't take a cell size. They calculate it from the point
-  density, as described in [Raster Cell size from LiDAR data](#raster-cell-size-from-lidar-data).
-  The hummock/hollow tool does the same when `cell_size` is `0`.
+- **Cell size**: the DTM, CHM/DSM and hummock/hollow tools take a `cell_size`. When it is `0` (the
+  default everywhere), they calculate it from the point density, as described in
+  [Raster Cell size from LiDAR data](#raster-cell-size-from-lidar-data).
 - **Output folder**: if `out_folder` doesn't exist, it's created. Existing outputs are overwritten.
 - **Tiled output and mosaic**: the raster tools write one raster per input tile. When there is more
   than one tile, they also merge the tiles into a single `Merged_*.tif` with `terra::mosaic`.
-- **Parallel processing**: the tools use `future::plan(multisession)` and `set_lidr_threads`. The
-  number of R workers comes from `r_processes(processes)`:
+- **Parallel processing**: the LiDAR tools use `future::plan(multisession)` and `set_lidr_threads`.
+  The number of R workers comes from `r_processes(processes)`:
   - A `processes` value of 0 or less (the default) means "use every CPU core".
   - The worker count is never more than `processes`, the number of CPU cores, or 8.
   - When more than 2 workers would be used, available memory caps the count: 2 workers with about
     50 GB or less free, and 4 workers with about 150 GB or less free.
-  - The TIN and kriging DTM tools halve the worker count when the cell size is under 1 map unit.
+  - lidR gets that count as its thread count, and `future` starts half as many worker sessions
+    (at least 1). The kriging DTM is the exception and starts the full count.
+  - The TIN and kriging DTM tools halve the count first when the cell size is under 1 map unit.
+  - Every tool resets the plan to `sequential` when it finishes, even if it fails.
+
+  Surface Water Mapping and Depth-to-Water size their workers differently (see
+  [Tiled processing](#tiled-processing-for-surface-water-and-depth-to-water)).
+- **Progress**: the R functions print `R_PROGRESS:<percent>` lines at each stage. The GUI reads them
+  to move its progress bar and doesn't show them in the log.
 - **R packages**: the environment provides only R and rpy2. Each tool checks for the R packages it
   needs and installs any missing ones from the CRAN mirror in Canada into the library of the R it
   runs on (`<R_HOME>/library`, inside the conda or pixi environment). The first run of each tool can
   therefore take a while. If a package still can't be installed, the tool stops with
   `R packages could not be installed into <library>: <names>`.
+
+#### Tiled processing for Surface Water and Depth-to-Water
+
+Surface Water Mapping and Depth-to-Water from Surface Water work on rasters that can be very large
+(for example a 2 cm orthomosaic or a 10 cm DTM). They split the grid into square tiles of `tile_size`
+cells per side and process the tiles in parallel R sessions (`run_tiles`):
+
+- **Workers**: `r_processes_by_memory` uses the smallest of the requested `processes` (every CPU core
+  when 0 or less), the number of CPU cores, the number of tiles, and how many workers fit in 60% of
+  the free memory. Each worker is budgeted at 200 MB plus 100 bytes per cell of its tile. The tool
+  prints the count and the limits, for example
+  `R workers: 4 (smallest of: requested 16, CPU cores 16, tiles 4, free memory for 22 at 0.60 GB each)`.
+  A smaller `tile_size` uses less memory per worker.
+- **Progress**: the tiles run in about 20 batches. After each batch, the GUI shows
+  `Surface water tiles n of N` or `Kriging tiles n of N` and updates the progress bar.
+- **Temporary files**: the tiles and terra's temporary files go to a `surface_water_temp_*` or
+  `dtw_temp_*` folder inside `out_folder`, not the system temp drive, because heavy temporary traffic
+  there can get R killed by antivirus software. The folder is deleted when the tool finishes. If
+  Windows still holds a file open, the tool prints a warning naming the folder.
+- **Same result as untiled**: tiling doesn't change the output. Surface water tiles read a buffer
+  wide enough to hold any patch smaller than `min_patch_area`, and each kriged cell uses only its
+  `nmax` nearest water points, wherever its tile boundary falls.
 
 ---
 
@@ -157,13 +190,15 @@ from beratools.tools.rpy_find_cellsize import rpy_find_cellsize
 rpy_find_cellsize(in_las_folder="tests/data/LiDAR")
 ```
 
+![Raster Cell size from LiDAR data in the BERA Tools GUI, showing the recommended cell size in the log](docs/files/screenshots/pc2products_gui_cellsize.png)
+
 ### Ground Classify Using CSF
 
 Classifies ground points with the Cloth Simulation Filter (Zhang et al., 2016), using
 `lidR::classify_ground` with `RCSF`'s `csf()` algorithm. The cloth runs for 500 iterations with a
 time step of 0.65. Noise (class 7) and overlap points are dropped when the tiles are read.
 
-If the input is already ground-classified (the first file has any class 2 points), the existing
+If the input is already ground-classified (every tile has class 2 points), the existing
 classification is replaced and lidR's progress messages are hidden.
 
 | Parameter | Type | Required | Description |
@@ -186,15 +221,25 @@ rpy_gnd_csf(in_las_folder="tests/data/LiDAR",
             slope=False, class_threshold=0.3, cloth_resolution=1.0, rigidness=1)
 ```
 
+![Ground Classify Using CSF in the BERA Tools GUI after a run](docs/files/screenshots/pc2products_gui_gnd_csf.png)
+
+![Side view of a 2 m wide transect through one classified sample tile, with ground points in brown along the terrain and non-ground points in blue above it](docs/files/screenshots/pc2products_output_gnd_csf.png)
+
+*A 2 m wide transect through `tile_554600_6138400_gnd_classified.las`, classified with the settings
+above. The ground points (class 2) follow the terrain under the canopy.*
+
 ### Generate DTM from LiDAR Data
 
-Builds a Digital Terrain Model from the ground points with `lidR::rasterize_terrain`.
+Builds a Digital Terrain Model from the ground points with `lidR::rasterize_terrain`. Every tile must
+be ground-classified (see [How all the tools behave](#how-all-the-tools-behave)). The tool also reports
+whether the data is height-normalized; if it is, the output is a normalized DTM.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `in_las_folder` | directory | Yes | Folder containing the input LAS/LAZ tiles. |
+| `in_las_folder` | directory | Yes | Folder containing the ground-classified LAS/LAZ tiles. |
 | `out_folder` | directory (output) | Yes | Folder for the output rasters. |
 | `style` | `tin` \| `idw` \| `kriging` | Yes | Interpolation algorithm. The default is `tin`. An invalid value falls back to `tin`. |
+| `cell_size` | float | No | Output cell size in metres. `0` (the default) calculates it from the point density. |
 | `processes` | int | No | Requested number of parallel workers (see [How all the tools behave](#how-all-the-tools-behave)). |
 
 | `style` | lidR algorithm | Tile output | Merged output |
@@ -206,14 +251,19 @@ Builds a Digital Terrain Model from the ground points with `lidR::rasterize_terr
 ```python
 from beratools.tools.rpy_dtm_by import rpy_dtm
 
-rpy_dtm(in_las_folder="tests/data/LiDAR",
+rpy_dtm(in_las_folder="tests/data/LiDAR/Classified_PC",
         out_folder="tests/data/LiDAR/Raster_Output",
-        style="tin")
+        style="tin", cell_size=0)
 ```
 
 While a tool runs, the **Run** button is disabled and the R output streams into the log:
 
 ![Generate DTM from LiDAR Data running in the BERA Tools GUI](docs/files/screenshots/pc2products_gui_dtm_running.png)
+
+![Hillshaded DTM of the sample area, rising from about 709 m at the edges to 713 m in a mound near the centre](docs/files/screenshots/pc2products_output_dtm.png)
+
+*`Merged_TIN_DTM.tif` from the ground-classified sample tiles, `style = tin`, `cell_size = 0.3`,
+shown with a hillshade.*
 
 ### Normalize LiDAR Data
 
@@ -225,26 +275,33 @@ ground points (class 2) and subtracted from every point, so Z becomes height abo
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `in_las_folder` | directory | Yes | Folder containing the ground-classified LAS/LAZ tiles. |
-| `out_folder` | directory (output) | Yes | Folder in which the `Normalized_PC/` subfolder is created. |
+| `out_folder` | directory (output) | Yes | Folder for the normalized point clouds. |
 | `style` | `tin` \| `idw` \| `kriging` | Yes | Terrain interpolation algorithm: `tin()`, `knnidw()` or `kriging()`. The default is `tin`. An invalid value falls back to `tin`. |
 | `processes` | int | No | Requested number of parallel workers. |
 
-Output: one `<out_folder>/Normalized_PC/n_<tile>.las` per input tile. Point
-[Generate CHM or DSM from LiDAR Data](#generate-chm-or-dsm-from-lidar-data) at the `Normalized_PC`
-folder to get a CHM.
+Output: one `<out_folder>/n_<tile>.las` per input tile. Write them to a folder of their own, such as
+`Normalized_PC`, and point [Generate CHM or DSM from LiDAR Data](#generate-chm-or-dsm-from-lidar-data)
+at that folder to get a CHM.
 
 ```python
 from beratools.tools.rpy_normalized_PC import rpy_normalized_PC
 
-rpy_normalized_PC(in_las_folder="tests/data/LiDAR",
-                  out_folder="tests/data/LiDAR",
+rpy_normalized_PC(in_las_folder="tests/data/LiDAR/Classified_PC",
+                  out_folder="tests/data/LiDAR/Normalized_PC",
                   style="tin")
 ```
+
+![Normalize LiDAR Data in the BERA Tools GUI after a run](docs/files/screenshots/pc2products_gui_normalize.png)
+
+![The same transect before and after normalization: the sloping ground becomes a flat line at 0 m and the trees stand on it](docs/files/screenshots/pc2products_output_normalize.png)
+
+*The transect from [Ground Classify Using CSF](#ground-classify-using-csf), before and after
+normalization with `style = tin`. The ground points lie on 0 m, and Z is height above ground.*
 
 ### Generate CHM or DSM from LiDAR Data
 
 Builds a height surface from the point cloud with `lidR::rasterize_canopy`. The tool decides what to
-produce by calling `detect_normalized`, which reads the **first** LAS/LAZ file in the folder:
+produce by calling `detect_normalized`, which reads the **first** LAS/LAZ file in the folder, and prints which output it will produce:
 
 - If the mean |Z| of the ground points (class 2) is **below 1**, the data counts as
   height-normalized and the tool produces a **CHM**.
@@ -255,6 +312,7 @@ produce by calling `detect_normalized`, which reads the **first** LAS/LAZ file i
 | `in_las_folder` | directory | Yes | Folder containing the input LAS/LAZ tiles. |
 | `out_folder` | directory (output) | Yes | Folder for the output rasters. |
 | `style` | `tin` \| `pitfree` | Yes | Surface algorithm. The default is `tin`. An invalid value falls back to `tin`. |
+| `cell_size` | float | No | Output cell size in metres. `0` (the default) calculates it from the point density. |
 | `processes` | int | No | Requested number of parallel workers. |
 
 | `style` | lidR algorithm | Tile output | Merged output |
@@ -263,18 +321,26 @@ produce by calling `detect_normalized`, which reads the **first** LAS/LAZ file i
 | `pitfree` | `pitfree(thresholds = c(0, 3, 5, 10, 15, 20), max_edge = c(0, 3 × cell_size), subcircle = cell_size)`. Overlap points are also dropped. | `<tile>_PitF_CHM.tif` / `<tile>_PitF_DSM.tif` | `Merged_PitF_CHM.tif` / `Merged_PitF_DSM.tif` |
 
 ```python
-from beratools.tools.rpy_CHM_DSM_by import rpy_chm_dsm
+from beratools.tools.rpy_CHM_DSM_by import rpy_chm_dsm_by
 
 # DSM from the original tiles
-rpy_chm_dsm(in_las_folder="tests/data/LiDAR",
-            out_folder="tests/data/LiDAR/Raster_Output",
-            style="pitfree")
+rpy_chm_dsm_by(in_las_folder="tests/data/LiDAR",
+               out_folder="tests/data/LiDAR/Raster_Output",
+               style="pitfree", cell_size=0)
 
 # CHM from the output of Normalize LiDAR Data
-rpy_chm_dsm(in_las_folder="tests/data/LiDAR/Normalized_PC",
-            out_folder="tests/data/LiDAR/Raster_Output",
-            style="tin")
+rpy_chm_dsm_by(in_las_folder="tests/data/LiDAR/Normalized_PC",
+               out_folder="tests/data/LiDAR/Raster_Output",
+               style="tin", cell_size=0)
 ```
+
+![Generate CHM or DSM from LiDAR Data in the BERA Tools GUI after making a CHM from the normalized tiles](docs/files/screenshots/pc2products_gui_chm_dsm.png)
+
+![DSM of the sample area in elevation colours next to the CHM in shades of green, both showing the same tree crowns](docs/files/screenshots/pc2products_output_chm_dsm.png)
+
+*Left: `Merged_PitF_DSM.tif` from the classified tiles (a DSM, because they aren't normalized),
+shown with a hillshade. Right: `Merged_PitF_CHM.tif` from the normalized tiles. Both use
+`style = pitfree` and `cell_size = 0.3`.*
 
 ### Detect Hummock and Hollow from LiDAR Data
 
@@ -292,8 +358,8 @@ tool:
 | More than `lawn_range` below the smoothed surface | `-1` (hollow) |
 | Within ±`lawn_range` | `0` (lawn) |
 
-The data must be ground-classified. If the first file has no class 2 points, the tool prints a
-warning and stops without writing anything. Run [Ground Classify Using CSF](#ground-classify-using-csf)
+The data must be ground-classified. If any tile has no class 2 points, the tool prints a warning and
+stops without writing anything. Run [Ground Classify Using CSF](#ground-classify-using-csf)
 first.
 
 | Parameter | Type | Required | Description |
@@ -322,6 +388,11 @@ rpy_hh2raster(in_las_folder="tests/data/LiDAR/Classified_PC",
 
 ![Detect Hummock and Hollow from LiDAR Data in the BERA Tools GUI after a run](docs/files/screenshots/pc2products_gui_hh.png)
 
+![Height relative to the smoothed terrain on a brown-to-green scale, next to the hummock, lawn and hollow classes](docs/files/screenshots/pc2products_output_hh.png)
+
+*`Merged_CHH_median_3m.tif` (left) and `Merged_HH_median_3m.tif` (right) from the classified sample
+tiles, with `Smooth_by = median`, `Min_ws = 3`, `lawn_range = 0.1` and `cell_size = 0.3`.*
+
 ### Surface Water Mapping
 
 Maps surface water from a true-colour orthomosaic, following section 2.4 of Chan, Dabros & McDermid
@@ -332,9 +403,18 @@ Maps surface water from a true-colour orthomosaic, following section 2.4 of Chan
 2. Trains an `rpart` decision tree on those values, and estimates its accuracy with 5-fold
    cross-validation on the training points.
 3. Classifies every cell of the orthomosaic. Cells the tree labels `water` become `1`, all others `0`.
+   The tree only compares each band with its split values, so the tool turns it into a small lookup
+   table and classifies cells with `findInterval`. This is much faster than `predict()` and gives the
+   same result. The tool first checks the table against `predict()` on the training points and
+   10,000 sample cells, and stops if they disagree.
 4. If a CHM is given, sets cells with canopy taller than `max_canopy_height` to `0`. The CHM is
-   resampled to the orthomosaic's grid first.
+   projected and cropped to the orthomosaic once and turned into a canopy mask, which is resampled to
+   each tile's grid. If the CHM doesn't overlap the orthomosaic, the tool warns and skips the mask.
 5. Sets water patches (8-connected) smaller than `min_patch_area` to `0`.
+
+Steps 3–5 run in parallel tiles of `tile_size` cells (see
+[Tiled processing](#tiled-processing-for-surface-water-and-depth-to-water)). The tiles are then merged
+into one compressed `surface_water.tif`.
 
 The training polygons need a `class` field. Polygons labelled `water` (in any case) are surface water;
 use any other labels for the rest, for example `ground` and `shadow` as in the paper. rpart needs at
@@ -350,6 +430,8 @@ least 20 training points before it splits, so the tool warns if the tree ends up
 | `min_patch_area` | float | No | Water patches smaller than this area (m²) are removed; `0` keeps them all. The default is `0.04` (20 × 20 cm). |
 | `points_per_polygon` | int | No | Random training points per polygon. The default is `2`. |
 | `seed` | int | No | Seed for the training points and cross-validation folds. The default is `1`. |
+| `tile_size` | int | No | Tile size in cells per side. Smaller tiles use less memory per worker. The default is `2000`. |
+| `processes` | int | No | Requested number of parallel workers. |
 
 | Output | Contents |
 |--------|----------|
@@ -362,8 +444,17 @@ least 20 training points before it splits, so the tool warns if the tree ends up
 from beratools.tools.rpy_surface_water import rpy_surface_water
 
 rpy_surface_water(in_ortho="ortho.tif", in_training="training.gpkg|training",
-                  in_chm="chm.tif", out_folder="surface_water")
+                  in_chm="chm.tif", out_folder="surface_water", tile_size=2000)
 ```
+
+![Surface Water Mapping in the BERA Tools GUI after a run](docs/files/screenshots/pc2products_gui_surface_water.png)
+
+![Synthetic orthomosaic with training polygons, the CHM, and the surface water raster, where only the open pool is mapped as water](docs/files/screenshots/pc2products_output_surface_water.png)
+
+*The synthetic test scene from `make_surface_water_data` in `tests/conftest.py`, run with
+`points_per_polygon = 20`. Both blue squares are water-coloured, but the right-hand one lies under
+1.5 m of canopy, so the CHM mask removes it. A single water-coloured cell at the top right is also
+removed, because it is smaller than `min_patch_area`.*
 
 ### Depth-to-Water from Surface Water
 
@@ -381,6 +472,11 @@ groundwater, so the elevation of the many small pools traces the water table. Th
 5. Leaves out the exclusion polygons, if any: they give no water points and are NA in the outputs.
    The paper excluded an upland knoll this way, because it had too little surface water.
 
+The kriging in step 3 runs in parallel tiles of `tile_size` cells of the kriging grid (see
+[Tiled processing](#tiled-processing-for-surface-water-and-depth-to-water)). On the DTM grid, cells
+without a DTM value or inside the exclusion polygons are skipped. The DTM must have a projected CRS,
+because `grid_size` and `kriging_cell_size` are in metres; a longitude/latitude DTM stops the tool.
+
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `in_dtm` | raster | Yes | DTM. The water table and DTW are produced on its grid. |
@@ -390,12 +486,14 @@ groundwater, so the elevation of the many small pools traces the water table. Th
 | `grid_size` | float | No | Grid cell size (m) for the water points. The default is `10`. |
 | `nmax` | int | No | Nearest water points used for each prediction. The default is `10`. |
 | `variogram_model` | `Ste` \| `Sph` \| `Exp` \| `Gau` | No | Variogram model. The default is `Ste` (Matern, as in the paper). |
-| `kriging_cell_size` | float | No | Krige on a coarser grid (m), then resample bilinearly to the DTM. `0` (the default) kriges on the DTM grid, which is slow for a large 10 cm DTM. |
+| `kriging_cell_size` | float | No | Krige on a coarser grid (m), then resample bilinearly to the DTM. A value no larger than the DTM's cell size kriges on the DTM grid, which is slow for a large 10 cm DTM. The default is `0.01`, so any DTM coarser than 1 cm is kriged on its own grid. |
+| `tile_size` | int | No | Tile size in cells of the kriging grid per side. Smaller tiles use less memory per worker. The default is `1000`. |
+| `processes` | int | No | Requested number of parallel workers. |
 
 | Output | Contents |
 |--------|----------|
-| `water_table.tif` | Kriged water table elevation. |
-| `dtw.tif` | Depth to water (m): positive below ground, `0` on surface water. |
+| `water_table.tif` | Kriged water table elevation (compressed 32-bit float). |
+| `dtw.tif` | Depth to water (m): positive below ground, `0` on surface water (compressed 32-bit float). |
 | `water_points.gpkg` | The water elevation points used for kriging. |
 | `variogram_model.csv`, `variogram.png` | Fitted variogram parameters and plot. |
 | `water_table_cv.csv` | Leave-one-out cross-validation of the water table at the water points (MAE, RMSE). |
@@ -409,8 +507,16 @@ to `0` for lying below the water table were treated as water in that test.
 from beratools.tools.rpy_dtw import rpy_dtw
 
 rpy_dtw(in_dtm="dtm.tif", in_water="surface_water/surface_water.tif",
-        in_mask="exclude.gpkg|exclude", out_folder="dtw", kriging_cell_size=1.0)
+        in_mask="exclude.gpkg|exclude", out_folder="dtw", kriging_cell_size=1.0, tile_size=1000)
 ```
+
+![Depth-to-Water from Surface Water in the BERA Tools GUI after a run](docs/files/screenshots/pc2products_gui_dtw.png)
+
+![Kriged water table with the water points on it, next to the depth-to-water raster, with a blank square where the exclusion polygon is](docs/files/screenshots/pc2products_output_dtw.png)
+
+*The synthetic test DTM and pools from `make_dtw_data` in `tests/conftest.py`, kriged on the DTM
+grid. Each black dot is one 10 m cell's water point. DTW is `0` on the pools and blank inside the
+exclusion polygon.*
 
 ### Seismic Line Disturbance Analysis
 
@@ -473,6 +579,13 @@ rpy_seismic_line_analysis(in_segments="segments.gpkg|segments",
                           out_folder="analysis")
 ```
 
+![Seismic Line Disturbance Analysis in the BERA Tools GUI, with the summary tables in the log](docs/files/screenshots/pc2products_gui_line_analysis.png)
+
+![The tool's DTM deviation violin plot and microform proportion bar plot](docs/files/screenshots/pc2products_output_line_analysis.png)
+
+*Two of the plots the tool writes to `plots/`, from the synthetic segments and rasters made by
+`make_seismic_line_data` in `tests/conftest.py`.*
+
 #### Reproducing Chan et al. (2026)
 
 The paper's workflow maps onto the PC2Products tools like this:
@@ -497,7 +610,7 @@ Disturbance Analysis.
 
 #### The `bt` command
 
-Installing the package (see [Installation](#installation)) adds a `bt` command (also available as `beratools`)
+Installing the package (see [Installation](#installation)) adds a `bt` command (also available as `PC2Products`)
 with one subcommand per tool:
 
 | Subcommand | Tool |
@@ -519,12 +632,12 @@ bt las_info                         # show the parameters for one tool
 bt las_info --in_las_folder <las_dir>
 bt cellsize --in_las_folder <las_dir>
 bt gnd_csf  --in_las_folder <las_dir> --out_folder <out_dir> --slope false --rigidness 2
-bt dtm      --in_las_folder <las_dir> --out_folder <out_dir> --style tin -p 4
+bt dtm      --in_las_folder <las_dir> --out_folder <out_dir> --style tin --cell_size 0 -p 4
 bt normalize --in_las_folder <las_dir> --out_folder <out_dir> --style tin
-bt chm_dsm  --in_las_folder <las_dir> --out_folder <out_dir> --style pitfree
+bt chm_dsm  --in_las_folder <las_dir> --out_folder <out_dir> --style pitfree --cell_size 0.5
 bt hh       --in_las_folder <las_dir> --out_folder <out_dir> --Smooth_by median --Min_ws 3 --lawn_range 0.1
-bt surface_water --in_ortho ortho.tif --in_training "training.gpkg|training" --in_chm chm.tif --out_folder <out_dir>
-bt dtw --in_dtm dtm.tif --in_water surface_water.tif --out_folder <out_dir> --kriging_cell_size 1
+bt surface_water --in_ortho ortho.tif --in_training "training.gpkg|training" --in_chm chm.tif --out_folder <out_dir> --tile_size 2000
+bt dtw --in_dtm dtm.tif --in_water surface_water.tif --out_folder <out_dir> --kriging_cell_size 1 --tile_size 1000
 bt line_analysis --in_segments "segments.gpkg|segments" --in_dtm dtm.tif --in_microform HH.tif --in_dtw dtw.tif --out_folder <out_dir>
 bt gui                              # launch the GUI
 ```
@@ -582,7 +695,8 @@ Run it from the repository root, because the default paths are relative to it. S
 
 ### Requirements
 
-**Python:** `rpy2` and `psutil`, in addition to the core BERA Tools dependencies. The
+**Python:** `rpy2` and `psutil`, in addition to the core BERA Tools dependencies (Surface Water
+Mapping and Depth-to-Water also use `rasterio`, one of those, to plan their tiles). The
 [example workflow](#example-workflow) also needs `hydra-core`. All three are in `environment.yml` and
 `pixi.toml`.
 
@@ -617,6 +731,9 @@ and `R_HOME\bin` folders to the DLL search path and `PATH`. If it can't find R, 
 `sys.executable`, `sys.prefix`, `R_HOME` and the `which R` / `which Rscript` results to help with
 debugging, then raises an error with installation instructions.
 
+It also sets `RPY2_CFFI_MODE=ABI`, so rpy2 connects to R in ABI mode instead of API mode, which avoids
+an error when importing rpy2 in API mode.
+
 ### Installation
 
 Both environments contain only R and rpy2 on the R side. Every R package comes from CRAN, installed by
@@ -625,7 +742,7 @@ the tools into the environment's R the first time they need it (see
 
 | | `environment.yml` (conda) | `pixi.toml` (pixi) |
 |---|---|---|
-| Python | 3.12 | 3.14 |
+| Python | 3.12 or newer | 3.14 |
 | R | `r-base` 4.5.x | `r-base` 4.5.x |
 | rpy2 | From PyPI | From conda-forge on Linux, from PyPI on Windows |
 | R packages | None | None |
@@ -670,11 +787,12 @@ python -m pytest tests/test_r_environment.py -v
 
 Sample tiles are in `tests/data/LiDAR/`. The tools write rasters to `tests/data/LiDAR/Raster_Output/`
 and point clouds to `tests/data/LiDAR/Classified_PC/` and `tests/data/LiDAR/Normalized_PC/`; all three
-are git-ignored. The tests use the arguments in `tests/conftest.py`.
+are git-ignored. The tests use the arguments in `tests/conftest.py` (the `tool_r_arguments_integration`
+and `tool_arguments_r_workflow` fixtures).
 
 | Tests | What they cover | Needs R |
 |-------|-----------------|---------|
-| `tests/test_tools.py` | Runs each LiDAR tool on the sample tiles and checks the output | Yes |
+| `tests/test_tools.py` | Runs each LiDAR tool on the sample tiles and checks the output (the `Merged_*` mosaics for the raster tools) | Yes |
 | `tests/test_workflow.py` | Runs CSF classification, DTM, DSM, normalization, CHM (from the normalized tiles) and hummock/hollow in sequence on the sample tiles, checking each tool's output, then deletes the outputs | Yes |
 | `tests/test_r_environment.py` | Installs any missing R packages the tools need, then checks that they load | Yes |
 | `tests/test_surface_water.py` | Runs Surface Water Mapping on a synthetic orthomosaic, CHM and training polygons (built by `make_surface_water_data` in `tests/conftest.py`) and checks the water, canopy mask and patch filter | Yes |
@@ -706,3 +824,8 @@ Ubuntu it sets up the pixi environment and installs the system GDAL/GEOS/PROJ/ud
 It then runs `tests/test_r_environment.py`, which compiles and installs the R packages into the pixi
 R, and `tests/test_workflow.py`, both with coverage. The job's timeout is 60 minutes to leave room
 for compiling the R packages.
+
+`.github/workflows/python-compatibility-tests.yml` is started by hand (`workflow_dispatch`). It runs
+the tests with tox on Python 3.12, 3.13 and 3.14 in a conda-forge environment that includes R 4.5,
+rpy2 and the R packages. Python 3.14 runs without `networkit`, because conda-forge has no build of it
+for 3.14.
