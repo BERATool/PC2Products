@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'PC2Product/**'
+      - 'beratools/**'
       - 'tests/**'
       - 'pixi.toml'
       - 'pixi.lock'
@@ -15,7 +15,7 @@ on:
     branches:
       - main
     paths:
-      - 'PC2Product/**'
+      - 'beratools/**'
       - 'tests/**'
       - 'pixi.toml'
       - 'pixi.lock'
@@ -63,7 +63,7 @@ jobs:
         run: |
           export PATH="$HOME/.pixi/bin:$PATH"
           pixi run pytest tests/test_r_environment.py \
-            --cov=PC2Product \
+            --cov=beratools \
             --cov-report=term \
             --maxfail=1 \
             --disable-warnings \
@@ -73,7 +73,7 @@ jobs:
         run: |
           export PATH="$HOME/.pixi/bin:$PATH"
           pixi run pytest  tests/test_workflow.py \
-            --cov=PC2Product \
+            --cov=beratools \
             --cov-report=term \
             --maxfail=1 \
             --disable-warnings \
