@@ -55,6 +55,7 @@ def initialize_r():
 
     if r is not None:
         return
+    robjects_module = _import_robjects()
     import logging
 #   suppresses output only during the import/startup phase,
 #   then restores normal printing for the rest of the test run.
@@ -70,8 +71,6 @@ def initialize_r():
 
     callbacks.consolewrite_print = lambda x: None
     callbacks.consolewrite_warnerror = lambda x: None
-
-    robjects_module = _import_robjects()
 
     callbacks.consolewrite_print = orig_print
     callbacks.consolewrite_warnerror = orig_warn
@@ -91,7 +90,17 @@ def initialize_r():
         f"R was located but rpy2 could not connect to it:\n{e}"
             )
 
-
+def r_processes_by_memory(processes, worker_bytes, tasks):
+    """Workers for an R job whose memory per worker is known: as many as requested (all CPU
+    cores if processes <= 0), limited by the CPU cores, the number of tasks and the free memory.
+    60% of the free memory is shared out, leaving room for the system and other programs."""
+    cpu_count = os.cpu_count() or 1
+    requested = processes if processes > 0 else cpu_count
+    by_memory = int(psutil.virtual_memory().available * 0.6 // worker_bytes)
+    workers = max(1, min(requested, cpu_count, tasks, by_memory))
+    print(f"R workers: {workers} (smallest of: requested {requested}, CPU cores {cpu_count}, "
+          f"tiles {tasks}, free memory for {by_memory} at {worker_bytes / 1e9:.2f} GB each)")
+    return workers
 
 def r_processes(processes):
     stats = psutil.virtual_memory()  # returns a named tuple
