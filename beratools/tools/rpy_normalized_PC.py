@@ -12,7 +12,7 @@ def rpy_normalized_PC(in_las_folder,
 
     r_common.check_las_files_existence(in_las_folder)
     r_common.check_las_out_folder_existence(out_folder)
-    packages = ['lidR', 'gstat', 'rlas', 'future', 'terra', 'sp','raster','stars',"sf",]
+    packages = ['lidR', 'gstat', 'rlas', 'future', 'terra', 'sp','raster','stars','sf']
     try:
         r_common.check_r_packages_installation(packages)
     except Exception as e:

@@ -20,7 +20,7 @@ def rpy_las_info(in_las_folder,
         Normalized / not normalized
         Ground elevation statistics"""
     r_common.check_las_files_existence(in_las_folder)
-    packages = ['lidR',  'rlas', 'future', 'terra', 'sp','raster','stars',"sf"]
+    packages = ['lidR',  'rlas', 'future', 'terra', 'sp','raster','stars','sf']
     try:
         r_common.check_r_packages_installation(packages)
     except Exception as e:
