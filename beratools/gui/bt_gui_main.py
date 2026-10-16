@@ -708,14 +708,12 @@ class MainWindow(QtWidgets.QMainWindow):
                 print("custom_callback: Problem parsing data into number: ", e)
             except Exception as e:
                 print(e)
-        elif value.startswith("R_PROGRESS:"):
+        if value.startswith("R_PROGRESS:"):
             try:
-                self.progress_bar.setValue(
-                        int(value.split(":")[1]))
+                self.progress_bar.setValue(int(value.split(":")[1]))
             except ValueError:
                 pass
             return
-
         elif "PROGRESS_LABEL" in value:
             str_label = extract_string_from_printout(value, "PROGRESS_LABEL")
             value = value.replace(str_label, "").strip()  # remove progress string
