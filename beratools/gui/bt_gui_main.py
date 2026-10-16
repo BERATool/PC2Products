@@ -16,6 +16,7 @@ Description:
 import json
 import os
 import platform
+import re
 import shlex
 import signal
 import sys
@@ -708,13 +709,15 @@ class MainWindow(QtWidgets.QMainWindow):
                 print("custom_callback: Problem parsing data into number: ", e)
             except Exception as e:
                 print(e)
-        if value.startswith("R_PROGRESS:"):
-            try:
-                self.progress_bar.setValue(int(value.split(":")[1]))
-            except ValueError:
-                pass
-            return
-        elif "PROGRESS_LABEL" in value:
+        # R tools print "R_PROGRESS:<percent>". lidR's progress bar clears itself with spaces and
+        # carriage returns but no newline, so the marker can come after that on the same line.
+        r_progress = re.search(r"R_PROGRESS:(\d+)", value)
+        if r_progress:
+            self.progress_bar.setValue(int(r_progress.group(1)))
+            value = value[: r_progress.start()] + value[r_progress.end() :]
+            if not value.strip():
+                return
+        if "PROGRESS_LABEL" in value:
             str_label = extract_string_from_printout(value, "PROGRESS_LABEL")
             value = value.replace(str_label, "").strip()  # remove progress string
             value = value.replace('"', "")
