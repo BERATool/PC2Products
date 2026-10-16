@@ -102,7 +102,7 @@ las_info <- function(in_las_folder, rprocesses)
     cat(sprintf("R_PROGRESS:%d\n",round(0.50 * 100)))
     flush.console()
     # Normalization check
-    las <- readLAS(ctg@data$filename[1])
+    las <- readLAS(list.files(in_las_folder,pattern="\\.la(s|z)$",full.names=TRUE)[1])
 
     ground <- filter_poi(
         las,
@@ -199,7 +199,7 @@ dtm_by_knnidw <- function(in_las_folder, out_folder, cell_size, rprocesses) {
     cat(sprintf("R_PROGRESS:%d\n",round(0.20 * 100)))
     flush.console()
     print("Generate DTM...")
-    opt_output_files(ctg) <- opt_output_files(ctg) <- paste0(out_folder, "/{*}_IDW_DTM")
+    opt_output_files(ctg) <- paste0(out_folder, "/{*}_IDW_DTM")
     ctg@output_options$
       drivers$
       SpatRaster$
@@ -233,7 +233,7 @@ dtm_by_kriging <- function(in_las_folder, out_folder, cell_size, rprocesses) {
     cat(sprintf("R_PROGRESS:%d\n",round(0.20 * 100)))
     flush.console()
     print("Generate DTM...")
-    opt_output_files(ctg) <- opt_output_files(ctg) <- paste0(out_folder, "/{*}_K_DTM")
+    opt_output_files(ctg) <- paste0(out_folder, "/{*}_K_DTM")
     ctg@output_options$
       drivers$
       SpatRaster$
@@ -296,9 +296,9 @@ pd2cellsize <- function(in_las_folder, rprocesses)
         map_units <- units::deparse_unit(crs_info$ud_unit)
     }
 
-    point_density <-
-        sum(ctg@data$Number.of.point.records) /
-        lidR::st_area(ctg)
+    area_m2 <- as.numeric(sf::st_area(ctg))
+
+    point_density <-sum(ctg@data$Number.of.point.records) / area_m2
 
     mean_pd <- sqrt(3 / point_density)
 
@@ -969,13 +969,150 @@ seismic_line_analysis <- function(segments_path, segments_layer, dtm_path, micro
 # (section 2.4): random training points in labelled polygons, an rpart decision tree on the
 # orthomosaic's RGB values, a canopy height mask, and removal of small water patches.
 ############################################################################################
+# Make a temporary folder inside out_folder and send every temporary write there instead of the
+# system temp drive (heavy temp traffic there gets R killed by antivirus software): terra's temp
+# files in this session, and TMPDIR/TMP/TEMP and GDAL's CPL_TMPDIR, which R worker processes
+# started afterwards inherit. Returns the folder; call restore_temp_dir(it) when done, which
+# restores the options and deletes the folder.
+use_temp_dir <- function(out_folder, prefix) {
+    dir <- normalizePath(tempfile(prefix, tmpdir = out_folder), winslash = "/", mustWork = FALSE)
+    dir.create(dir, recursive = TRUE)
+    vars <- c("TMPDIR", "TMP", "TEMP", "CPL_TMPDIR")
+    attr(dir, "env") <- Sys.getenv(vars, unset = NA)
+    attr(dir, "terra_tempdir") <- terra::terraOptions(print = FALSE)$tempdir
+    do.call(Sys.setenv, as.list(setNames(rep(dir, length(vars)), vars)))
+    terra::terraOptions(tempdir = dir)
+    dir
+}
+
+restore_temp_dir <- function(dir) {
+    terra::terraOptions(tempdir = attr(dir, "terra_tempdir"))
+    env <- attr(dir, "env")
+    for (v in names(env)) {
+        if (is.na(env[[v]])) Sys.unsetenv(v) else do.call(Sys.setenv, setNames(list(env[[v]]), v))
+    }
+    gc()  # release raster file handles so Windows lets the files be deleted
+    unlink(dir, recursive = TRUE)
+    if (dir.exists(dir)) print(paste("Warning! Could not delete the temporary folder:", dir))
+}
+
+# Run fun(i, ...) with the arguments in args for tiles 1..n_tiles on `workers` R processes (in
+# this session if 1) and return the results in tile order. The tiles run in batches (a multiple
+# of the worker count, about 20 batches), with progress printed after each one in the GUI's
+# format: a quoted PROGRESS_LABEL line and a %value line.
+run_tiles <- function(fun, args, n_tiles, workers, label) {
+    if (workers > 1) {
+        cl <- parallel::makeCluster(workers)
+        on.exit(parallel::stopCluster(cl))
+        parallel::clusterCall(cl, function(lib) .libPaths(lib), .libPaths())
+    }
+    batch <- workers * ceiling(n_tiles / workers / 20)
+    results <- vector("list", n_tiles)
+    for (start in seq(1, n_tiles, by = batch)) {
+        ids <- start:min(start + batch - 1, n_tiles)
+        results[ids] <- if (workers > 1) {
+            do.call(parallel::parLapplyLB, c(list(cl = cl, X = ids, fun = fun), args))
+        } else {
+            do.call(lapply, c(list(X = ids, FUN = fun), args))
+        }
+        cat(sprintf(' "PROGRESS_LABEL %s %d of %d" \n', label, max(ids), n_tiles))
+        cat(sprintf(" %%%s \n", round(100 * max(ids) / n_tiles, 1)))
+        flush.console()
+    }
+    results
+}
+
+# Classify cells (rows of an n x 3 red, green, blue matrix) with the decision tree's lookup table:
+# 1 water, 0 other, NA where a band is NA. See "Lookup table" in surface_water_map.
+water_lut_lookup <- function(rgb, lut, breaks) {
+    idx <- integer(nrow(rgb))
+    stride <- 1L
+    for (b in 1:3) {
+        idx <- idx + stride * findInterval(rgb[, b], breaks[[b]])
+        stride <- stride * (length(breaks[[b]]) + 1L)
+    }
+    lut[idx + 1L]
+}
+
+# Classify one tile of the orthomosaic (water 1, other 0), mask it with the CHM and remove small
+# water patches, then write the tile without its buffer. Runs in a worker process, so it opens
+# its rasters from file paths and gets every function it needs as an argument. The tile is held
+# as plain vectors, so its memory use is set by tile_size.
+surface_water_tile <- function(i, tiles, ortho_path, lut, breaks, lookup, tall_path,
+                               min_patch_area, tile_size, buffer, tile_dir, memfrac) {
+    library(terra)
+    # Share the memory between workers and keep terra's temporary files in tile_dir, which
+    # surface_water_map removes; restore the options for the calling session afterwards
+    opts <- terraOptions(print = FALSE)
+    on.exit(terraOptions(memfrac = opts$memfrac, tempdir = opts$tempdir, progress = opts$progress))
+    terraOptions(memfrac = memfrac, tempdir = tile_dir, progress = 0)
+
+    ortho <- rast(ortho_path, lyrs = 1:3)
+    rx <- res(ortho)[1]
+    ry <- res(ortho)[2]
+    grid_of <- function(r0, r1, c0, c1) {
+        rast(nrows = r1 - r0 + 1, ncols = c1 - c0 + 1, crs = crs(ortho),
+             extent = ext(xFromCol(ortho, c0) - rx / 2, xFromCol(ortho, c1) + rx / 2,
+                          yFromRow(ortho, r1) - ry / 2, yFromRow(ortho, r0) + ry / 2))
+    }
+    r0 <- tiles$row[i]
+    c0 <- tiles$col[i]
+    r1 <- min(r0 + tile_size - 1, nrow(ortho))
+    c1 <- min(c0 + tile_size - 1, ncol(ortho))
+    br0 <- max(1, r0 - buffer)
+    br1 <- min(nrow(ortho), r1 + buffer)
+    bc0 <- max(1, c0 - buffer)
+    bc1 <- min(ncol(ortho), c1 + buffer)
+    grid <- grid_of(br0, br1, bc0, bc1)
+
+    # Read only the buffered window of the orthomosaic; values come row by row
+    readStart(ortho)
+    rgb <- readValues(ortho, row = br0, nrows = br1 - br0 + 1, col = bc0, ncols = bc1 - bc0 + 1,
+                      mat = TRUE)
+    readStop(ortho)
+    water <- lookup(rgb, lut, breaks)
+    rm(rgb)
+
+    # Cells under canopy taller than max_canopy_height cannot be water; tall_path is the canopy
+    # mask prepared once by surface_water_map (this also sets cells without orthomosaic values
+    # to 0, so the step is skipped only for all-dry tiles)
+    if (nzchar(tall_path) && any(is.na(water) | water == 1L)) {
+        tall <- values(resample(rast(tall_path), grid, method = "near"), mat = FALSE)
+        water[!is.na(tall) & tall == 1] <- 0L
+        rm(tall)
+    }
+
+    # Remove water patches smaller than min_patch_area (m2)
+    if (min_patch_area > 0 && any(water == 1L, na.rm = TRUE)) {
+        patch_ids <- values(patches(setValues(grid, water), directions = 8, zeroAsNA = TRUE),
+                            mat = FALSE)
+        in_patch <- which(!is.na(patch_ids))
+        sizes <- tabulate(patch_ids[in_patch])
+        small <- in_patch[sizes[patch_ids[in_patch]] * rx * ry < min_patch_area]
+        water[small] <- 0L
+        rm(patch_ids, in_patch, small)
+    }
+
+    # Drop the buffer: keep the tile's own rows and columns
+    keep_rows <- (r0 - br0) + seq_len(r1 - r0 + 1)
+    keep_cols <- (c0 - bc0) + seq_len(c1 - c0 + 1)
+    keep <- as.vector(outer(keep_cols, (keep_rows - 1) * (bc1 - bc0 + 1), "+"))
+    water <- water[keep]
+
+    out <- file.path(tile_dir, sprintf("tile_%05d.tif", i))
+    writeRaster(setValues(grid_of(r0, r1, c0, c1), water), out, datatype = "INT1U", overwrite = TRUE)
+    list(file = out, water = sum(water == 1L, na.rm = TRUE), valid = sum(!is.na(water)))
+}
+
 surface_water_map <- function(ortho_path, training_path, training_layer, chm_path,
                               max_canopy_height, min_patch_area, points_per_polygon, seed,
-                              out_folder) {
+                              out_folder, tile_size = 2000, rprocesses = 1) {
     library(terra)
     library(rpart)
 
     dir.create(out_folder, showWarnings = FALSE, recursive = TRUE)
+    tile_dir <- use_temp_dir(out_folder, "surface_water_temp_")
+    on.exit(restore_temp_dir(tile_dir), add = TRUE)
 
     print("Reading input data...")
     ortho <- rast(ortho_path)
@@ -1020,7 +1157,7 @@ surface_water_map <- function(ortho_path, training_path, training_layer, chm_pat
         cv_pred[folds == k] <- predict(fold_model, samples[folds == k, ], type = "class")
     }
     accuracy <- mean(cv_pred == samples$class)
-    print(paste0("5-fold cross-validation overall accuracy: ", round(100 * accuracy, 1), "%"))
+    print(paste("5-fold cross-validation overall accuracy:", round(100 * accuracy, 1), "percent"))
 
     confusion <- as.data.frame.matrix(table(observed = samples$class, predicted = cv_pred))
     write.csv(cbind(observed = rownames(confusion), confusion),
@@ -1030,37 +1167,76 @@ surface_water_map <- function(ortho_path, training_path, training_layer, chm_pat
     writeVector(pts, file.path(out_folder, "training_points.gpkg"), overwrite = TRUE)
     capture.output(print(model), file = file.path(out_folder, "decision_tree.txt"))
 
-    # ---- Classify the orthomosaic ------------------------------------------------------------
-    print("Classifying the orthomosaic...")
-    is_water <- function(model, data) as.integer(predict(model, data, type = "class") == "water")
-    water <- terra::predict(ortho, model, fun = is_water, na.rm = TRUE)
+    # ---- Lookup table for the decision tree --------------------------------------------------
+    # The tree only compares each band with its split values, so cells whose bands fall between
+    # the same split values always get the same class. Classifying one value per interval gives a
+    # small lookup table, and findInterval then classifies millions of cells far faster than
+    # predict() on each cell, with the same result.
+    bands <- c("red", "green", "blue")
+    split_vals <- if (is.null(model$splits)) numeric(0) else model$splits[, "index"]
+    split_vars <- if (is.null(model$splits)) character(0) else rownames(model$splits)
+    breaks <- lapply(bands, function(b) sort(unique(split_vals[split_vars == b])))
+    reps <- lapply(breaks, function(b) if (length(b)) c(b[1] - 1, b) else 0)
+    names(reps) <- bands
+    lut <- as.integer(predict(model, do.call(expand.grid, reps), type = "class") == "water")
 
-    # Cells under canopy taller than max_canopy_height cannot be water
+    check <- rbind(samples[, bands], spatSample(ortho, 10000, method = "regular", na.rm = TRUE))
+    if (!identical(water_lut_lookup(as.matrix(check), lut, breaks),
+                   as.integer(predict(model, check, type = "class") == "water"))) {
+        stop("The decision tree lookup table disagrees with predict(); please report this.")
+    }
+
+    # ---- Classify the orthomosaic in tiles ---------------------------------------------------
+    # A water patch smaller than min_patch_area has fewer than min_patch_area / cell_area cells,
+    # so it spans fewer rows and columns than that. With a buffer this wide, every small patch
+    # touching a tile lies whole inside the buffered tile, and every patch cut by the buffer edge
+    # keeps more cells than the limit, so per-tile patch removal matches a whole-raster run.
+    cell_area <- prod(res(ortho))
+    buffer <- if (min_patch_area > 0) ceiling(sqrt(min_patch_area / cell_area)) else 0
+    tile_size <- max(1, as.integer(tile_size))
+    tiles <- expand.grid(row = seq(1, nrow(ortho), by = tile_size),
+                         col = seq(1, ncol(ortho), by = tile_size))
+    workers <- max(1, min(as.integer(rprocesses), nrow(tiles)))
+    if (buffer > tile_size) {
+        print(paste0("Warning! Each tile reads a ", buffer, "-cell buffer for patch removal, more than ",
+                     "the tile size of ", tile_size, " cells; a larger tile size reads less overlap."))
+    }
+    print(paste0("Classifying the orthomosaic in ", nrow(tiles), " tile(s) of ", tile_size, " x ",
+                 tile_size, " cells with ", workers, " worker(s)..."))
+    if (nzchar(chm_path)) print(paste("Masking cells with canopy height above", max_canopy_height, "m..."))
+    if (min_patch_area > 0) print(paste("Removing water patches smaller than", min_patch_area, "m2..."))
+
+    # Prepare the canopy mask once for all tiles: project the CHM to the orthomosaic's CRS if
+    # needed, crop it, and threshold it at its own resolution into a small 0/1 raster (1 = canopy
+    # taller than max_canopy_height). Each tile then only resamples this mask to its grid.
+    tall_path <- ""
     if (nzchar(chm_path)) {
-        print(paste("Masking cells with canopy height above", max_canopy_height, "m..."))
-        chm <- rast(chm_path)
-        if (!same.crs(chm, ortho)) chm <- project(chm, ortho)
-        chm <- resample(chm, ortho, method = "near")
-        water <- ifel(!is.na(chm) & chm > max_canopy_height, 0, water)
+        chm <- rast(chm_path, lyrs = 1)
+        if (!same.crs(chm, ortho)) chm <- project(chm, crs(ortho), method = "near")
+        if (is.null(intersect(ext(chm), ext(ortho)))) {
+            print("Warning! The CHM does not overlap the orthomosaic; no canopy mask is applied.")
+        } else {
+            chm <- crop(chm, ortho, snap = "out")
+            tall_path <- file.path(tile_dir, "tall_canopy.tif")
+            writeRaster(!is.na(chm) & chm > max_canopy_height, tall_path, datatype = "INT1U",
+                        gdal = c("COMPRESS=DEFLATE", "TILED=YES"))
+        }
+        rm(chm)
     }
 
-    # Remove water patches smaller than min_patch_area (m2)
-    if (min_patch_area > 0) {
-        patch_ids <- patches(water, directions = 8, zeroAsNA = TRUE)
-        sizes <- freq(patch_ids)
-        cell_area <- prod(res(water))
-        small <- sizes$value[sizes$count * cell_area < min_patch_area]
-        if (length(small) > 0) {
-            print(paste("Removing", length(small), "water patches smaller than", min_patch_area, "m2..."))
-            water <- ifel(patch_ids %in% small, 0, water)
-        }
-    }
+    tile_args <- list(tiles = tiles, ortho_path = ortho_path, lut = lut, breaks = breaks,
+                      lookup = water_lut_lookup, tall_path = tall_path, min_patch_area = min_patch_area,
+                      tile_size = tile_size, buffer = buffer, tile_dir = tile_dir,
+                      memfrac = 0.6 / workers)
+    results <- run_tiles(surface_water_tile, tile_args, nrow(tiles), workers, "Surface water tiles")
 
     out_file <- file.path(out_folder, "surface_water.tif")
-    writeRaster(water, out_file, datatype = "INT1U", overwrite = TRUE,
-                names = "surface_water")
-    water_cover <- global(water, "mean", na.rm = TRUE)[1, 1]
-    print(paste0("Surface water covers ", round(100 * water_cover, 1), "% of the classified area"))
+    writeRaster(vrt(vapply(results, `[[`, "", "file")), out_file, datatype = "INT1U",
+                overwrite = TRUE, names = "surface_water",
+                gdal = c("COMPRESS=DEFLATE", "TILED=YES", "BIGTIFF=IF_SAFER"))
+    water_cover <- sum(vapply(results, `[[`, 0, "water")) / max(1, sum(vapply(results, `[[`, 0, "valid")))
+    # No "%" sign in messages: the GUI reads any "%" as a progress value
+    print(paste("Surface water covers", round(100 * water_cover, 1), "percent of the classified area"))
     print(paste("Surface water raster saved to:", out_file))
 }
 
@@ -1070,16 +1246,68 @@ surface_water_map <- function(ortho_path, training_path, training_layer, chm_pat
 # (2017): the DTM is masked to surface water, the minimum water elevation in each grid cell is
 # kriged into a water table surface, and DTW = DTM - water table (0 on surface water).
 ############################################################################################
+# Krige the water table at the cell centres of one tile of the kriging grid and write the tile.
+# Each prediction uses only the nmax nearest water points, so tiles give the same values as
+# kriging the whole grid at once. Cells marked 1 in skip_path (if given) are left NA. Runs in a
+# worker process, so it opens its rasters from file paths and loads its own packages.
+dtw_tile <- function(i, tiles, target_path, skip_path, obs, fitted_vgm, nmax, tile_size, tile_dir,
+                     memfrac) {
+    library(terra)
+    library(gstat)
+    opts <- terraOptions(print = FALSE)
+    on.exit(terraOptions(memfrac = opts$memfrac, tempdir = opts$tempdir, progress = opts$progress))
+    terraOptions(memfrac = memfrac, tempdir = tile_dir, progress = 0)
+
+    target <- rast(target_path, lyrs = 1)
+    r0 <- tiles$row[i]
+    c0 <- tiles$col[i]
+    r1 <- min(r0 + tile_size - 1, nrow(target))
+    c1 <- min(c0 + tile_size - 1, ncol(target))
+    nr <- r1 - r0 + 1
+    nc <- c1 - c0 + 1
+    rx <- res(target)[1]
+    ry <- res(target)[2]
+    grid <- rast(nrows = nr, ncols = nc, crs = crs(target),
+                 extent = ext(xFromCol(target, c0) - rx / 2, xFromCol(target, c1) + rx / 2,
+                              yFromRow(target, r1) - ry / 2, yFromRow(target, r0) + ry / 2))
+
+    # Cell centres, row by row
+    cells <- data.frame(x = rep(xFromCol(target, c0:c1), times = nr),
+                        y = rep(yFromRow(target, r0:r1), each = nc))
+    krige <- rep(TRUE, nrow(cells))
+    if (nzchar(skip_path)) {
+        skip <- rast(skip_path)
+        readStart(skip)
+        krige <- readValues(skip, row = r0, nrows = nr, col = c0, ncols = nc) == 0
+        readStop(skip)
+    }
+    water_table <- rep(NA_real_, nrow(cells))
+    if (any(krige)) {
+        model <- gstat(formula = elev ~ 1, locations = ~x + y, data = obs, model = fitted_vgm, nmax = nmax)
+        water_table[krige] <- predict(model, cells[krige, ], debug.level = 0)$var1.pred
+    }
+
+    out <- file.path(tile_dir, sprintf("water_table_%05d.tif", i))
+    writeRaster(setValues(grid, water_table), out, datatype = "FLT8S", overwrite = TRUE)
+    out
+}
+
 dtw_map <- function(dtm_path, water_path, mask_path, mask_layer, grid_size, nmax, vgm_model,
-                    kriging_res, out_folder) {
+                    kriging_res, out_folder, tile_size = 1000, rprocesses = 1) {
     library(terra)
     library(gstat)
 
     dir.create(out_folder, showWarnings = FALSE, recursive = TRUE)
+    tile_dir <- use_temp_dir(out_folder, "dtw_temp_")
+    on.exit(restore_temp_dir(tile_dir), add = TRUE)
 
     print("Reading input data...")
     dtm <- rast(dtm_path)[[1]]
     names(dtm) <- "dtm"
+    if (isTRUE(is.lonlat(dtm))) {
+        stop("The DTM has a geographic (longitude/latitude) CRS, but the grid size and kriging cell ",
+             "size are in metres. Project the DTM to a projected CRS first.")
+    }
     water <- rast(water_path)[[1]]
     # Put the surface water raster on the DTM grid; "mode" keeps the majority class when the
     # water raster is finer than the DTM (e.g. a 2 cm orthomosaic classification)
@@ -1090,16 +1318,19 @@ dtw_map <- function(dtm_path, water_path, mask_path, mask_layer, grid_size, nmax
     }
     is_water <- !is.na(water) & water == 1
 
-    exclude <- NULL
+    # Exclusion polygons, rasterized once on the DTM grid (1 = excluded); touches = TRUE matches
+    # how mask() treats polygons
+    excluded <- NULL
     if (nzchar(mask_path)) {
         exclude <- if (nzchar(mask_layer)) vect(mask_path, layer = mask_layer) else vect(mask_path)
         if (!same.crs(exclude, dtm)) exclude <- project(exclude, dtm)
         print(paste("Excluding", nrow(exclude), "mask polygon(s) from the analysis..."))
+        excluded <- rasterize(exclude, dtm, field = 1, background = 0, touches = TRUE)
     }
 
     # ---- Water elevations: minimum per grid cell, at the grid cell centre ---------------------
     water_elev <- mask(dtm, is_water, maskvalues = FALSE)
-    if (!is.null(exclude)) water_elev <- mask(water_elev, exclude, inverse = TRUE)
+    if (!is.null(excluded)) water_elev <- mask(water_elev, excluded, maskvalues = 1)
     fact <- max(1, round(grid_size / res(dtm)[1]))
     grid_min <- aggregate(water_elev, fact = fact, fun = "min", na.rm = TRUE)
     pts <- as.points(grid_min, na.rm = TRUE)
@@ -1139,30 +1370,67 @@ dtw_map <- function(dtm_path, water_path, mask_path, mask_layer, grid_size, nmax
     print(paste0("Water table leave-one-out cross-validation: MAE = ", round(cv_stats$mae, 3),
                  " m, RMSE = ", round(cv_stats$rmse, 3), " m"))
 
-    target <- dtm
-    if (kriging_res > res(dtm)[1]) {
-        target <- aggregate(dtm, fact = round(kriging_res / res(dtm)[1]), fun = "mean", na.rm = TRUE)
-        print(paste("Kriging on a", res(target)[1], "m grid, then resampling bilinearly to the DTM..."))
-    } else {
+    # ---- Krige the water table in parallel tiles ---------------------------------------------
+    # On the DTM grid, cells without a DTM value or inside the exclusion polygons end up NA, so
+    # they are not kriged. A coarser kriging grid is kriged in full, because the bilinear
+    # resampling to the DTM also reads the cells next to them.
+    on_dtm_grid <- !(kriging_res > res(dtm)[1])
+    if (on_dtm_grid) {
+        target <- dtm
+        target_path <- dtm_path
+        skip <- is.na(dtm)
+        if (!is.null(excluded)) skip <- skip | excluded == 1
+        skip_path <- file.path(tile_dir, "skip.tif")
+        writeRaster(skip, skip_path, datatype = "INT1U")
         print(paste("Kriging on the DTM grid (", ncell(dtm), "cells)..."))
+    } else {
+        target <- aggregate(dtm, fact = round(kriging_res / res(dtm)[1]), fun = "mean", na.rm = TRUE)
+        target_path <- file.path(tile_dir, "kriging_grid.tif")
+        target <- writeRaster(target, target_path)
+        skip_path <- ""
+        print(paste("Kriging on a", res(target)[1], "m grid, then resampling bilinearly to the DTM..."))
     }
-    water_table <- interpolate(target, model, xyNames = c("x", "y"), index = 1, debug.level = 0)
-    if (kriging_res > res(dtm)[1]) water_table <- resample(water_table, dtm, method = "bilinear")
-    water_table <- mask(water_table, dtm)
-    names(water_table) <- "water_table"
 
-    # ---- DTW = DTM - water table; 0 on surface water and where the water table is above ground
-    dtw <- dtm - water_table
-    dtw <- ifel(dtw < 0, 0, dtw)
-    dtw <- ifel(is_water, 0, dtw)
-    if (!is.null(exclude)) {
-        water_table <- mask(water_table, exclude, inverse = TRUE)
-        dtw <- mask(dtw, exclude, inverse = TRUE)
+    tile_size <- max(1, as.integer(tile_size))
+    tiles <- expand.grid(row = seq(1, nrow(target), by = tile_size),
+                         col = seq(1, ncol(target), by = tile_size))
+    workers <- max(1, min(as.integer(rprocesses), nrow(tiles)))
+    print(paste0("Kriging in ", nrow(tiles), " tile(s) of ", tile_size, " x ", tile_size,
+                 " cells with ", workers, " worker(s)..."))
+    tile_files <- run_tiles(dtw_tile, list(tiles = tiles, target_path = target_path,
+                                           skip_path = skip_path, obs = obs, fitted_vgm = fitted_vgm,
+                                           nmax = nmax, tile_size = tile_size, tile_dir = tile_dir,
+                                           memfrac = 0.6 / workers),
+                            nrow(tiles), workers, "Kriging tiles")
+    water_table <- vrt(unlist(tile_files))
+    ext(water_table) <- ext(target)  # drop rounding differences between the tile extents
+    if (!on_dtm_grid) water_table <- resample(water_table, dtm, method = "bilinear")
+
+    # ---- Outputs, one pass each ----------------------------------------------------------------
+    # Water table: NA where the DTM is NA or excluded. DTW = DTM - water table, 0 on surface water
+    # and where the water table is above ground, NA where excluded.
+    layers <- c(dtm, water_table, is_water)
+    if (!is.null(excluded)) layers <- c(layers, excluded)
+    water_table_values <- function(v) {
+        wt <- v[, 2]
+        wt[is.na(v[, 1])] <- NA
+        if (ncol(v) > 3) wt[v[, 4] == 1] <- NA
+        wt
     }
-    names(dtw) <- "dtw"
-
-    writeRaster(water_table, file.path(out_folder, "water_table.tif"), overwrite = TRUE)
-    writeRaster(dtw, file.path(out_folder, "dtw.tif"), overwrite = TRUE)
+    dtw_values <- function(v) {
+        wt <- v[, 2]
+        wt[is.na(v[, 1])] <- NA
+        dtw <- v[, 1] - wt
+        dtw[!is.na(dtw) & dtw < 0] <- 0
+        dtw[v[, 3] == 1] <- 0
+        if (ncol(v) > 3) dtw[v[, 4] == 1] <- NA
+        dtw
+    }
+    gdal <- c("COMPRESS=DEFLATE", "PREDICTOR=3", "TILED=YES", "BIGTIFF=IF_SAFER")
+    app(layers, water_table_values, filename = file.path(out_folder, "water_table.tif"),
+        overwrite = TRUE, wopt = list(names = "water_table", datatype = "FLT4S", gdal = gdal))
+    dtw <- app(layers, dtw_values, filename = file.path(out_folder, "dtw.tif"),
+               overwrite = TRUE, wopt = list(names = "dtw", datatype = "FLT4S", gdal = gdal))
     stats <- global(dtw, c("mean", "max"), na.rm = TRUE)
     print(paste0("DTW: mean = ", round(stats[1, "mean"], 3), " m, max = ", round(stats[1, "max"], 3), " m"))
     print(paste("Water table and DTW rasters saved to:", out_folder))
@@ -1179,12 +1447,12 @@ normalized_lidar_knnidw <- function(in_las_folder, out_folder, rprocesses) {
 
     #read Las file and drop any noise from the point cloud
     ctg <- readLAScatalog(in_las_folder, filter = '-drop_class 7')
-    cat(sprintf("R_PROGRESS:%d\n",round(0.2 * 100)))
+    cat(sprintf("R_PROGRESS:%d\n",20))
     flush.console()
-    opt_output_files(ctg) <- opt_output_files(ctg) <- paste0(out_folder, "/n_{*}")
+    opt_output_files(ctg)  <- paste0(out_folder, "/n_{*}")
     print("Normalize lidar data...")
     opt_progress(ctg) <- TRUE
-    cat(sprintf("R_PROGRESS:%d\n",round(0.5 * 100)))
+    cat(sprintf("R_PROGRESS:%d\n",50))
     flush.console()
     n_las <- normalize_height(ctg, algorithm = knnidw())
     cat(sprintf("R_PROGRESS:%d\n",round(0.99 * 100)))
@@ -1208,7 +1476,7 @@ normalized_lidar_tin <- function(in_las_folder, out_folder, rprocesses) {
     ctg <- readLAScatalog(in_las_folder, filter = '-drop_class 7')
     cat(sprintf("R_PROGRESS:%d\n",round(0.2 * 100)))
     flush.console()
-    opt_output_files(ctg) <- opt_output_files(ctg) <- paste0(out_folder, "/n_{*}")
+    opt_output_files(ctg) <- paste0(out_folder, "/n_{*}")
     print("Normalize lidar data...")
     opt_progress(ctg) <- TRUE
     cat(sprintf("R_PROGRESS:%d\n",round(0.5 * 100)))
@@ -1236,7 +1504,7 @@ normalized_lidar_kriging <- function(in_las_folder, out_folder, rprocesses) {
     ctg <- readLAScatalog(in_las_folder, filter = '-drop_class 7')
     cat(sprintf("R_PROGRESS:%d\n",round(0.5 * 100)))
     flush.console()
-    opt_output_files(ctg) <- opt_output_files(ctg) <- paste0(out_folder, "/n_{*}")
+    opt_output_files(ctg) <- paste0(out_folder, "/n_{*}")
     print("Normalize lidar data...")
     opt_progress(ctg) <- TRUE
     n_las <- normalize_height(ctg, algorithm = kriging())
