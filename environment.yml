@@ -1,9 +1,10 @@
-# run: conda env create -n PC2Products -f environment.yml -q
+# run: conda env create -n PC2Products --file environment.yml -q
 
 # name: PC2Products
 channels:
   - nodefaults
   - conda-forge
+  - defaults
 dependencies:
   - python>3.11
   - dask
