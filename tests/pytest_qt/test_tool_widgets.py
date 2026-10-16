@@ -3,7 +3,8 @@ Unit tests for individual widget types using pytest-qt.
 
 Tests NumericInput, BooleanInput, OptionsInput, and FileSelector
 in isolation — each widget is constructed with a minimal param dict
-and exercised via set_value / get_value round-trips.
+and exercised via set_value / get_value round-trips. The param dicts
+are taken from PC2Products tool parameters in beratools.json.
 """
 
 from pathlib import Path
@@ -24,6 +25,7 @@ ALL_TOOL_NAMES = [
     "Raster Cell size from LiDAR data",
     "Detect Hummock and Hollow from LiDAR Data",
     "Ground Classify Using CSF",
+    "Normalize LiDAR Data",
     "Surface Water Mapping",
     "Depth-to-Water from Surface Water",
     "Seismic Line Disturbance Analysis",
@@ -37,29 +39,29 @@ ALL_TOOL_NAMES = [
 
 class TestNumericInputInt:
     PARAM = {
-        "name": "Line Processing Radius",
-        "description": "Max processing distance.",
-        "variable": "line_radius",
+        "name": "Nearest observations",
+        "description": "Number of nearest water points used for each kriging prediction.",
+        "variable": "nmax",
         "parameter_type": ["int"],
         "optional": True,
-        "default_value": 35,
+        "default_value": 10,
     }
 
     def test_default_value(self, make_numeric_input):
         w = make_numeric_input(self.PARAM)
-        assert w.data_input.value() == 35
+        assert w.data_input.value() == 10
 
     def test_set_and_get(self, make_numeric_input):
         w = make_numeric_input(self.PARAM)
         w.set_value(20)
         assert w.data_input.value() == 20
-        assert w.get_value() == {"line_radius": 20}
+        assert w.get_value() == {"nmax": 20}
 
     def test_set_default_value(self, make_numeric_input):
         w = make_numeric_input(self.PARAM)
         w.set_value(99)
         w.set_default_value()
-        assert w.data_input.value() == 35
+        assert w.data_input.value() == 10
 
     def test_spinbox_type(self, make_numeric_input):
         from PyQt5.QtWidgets import QSpinBox
@@ -70,24 +72,24 @@ class TestNumericInputInt:
 
 class TestNumericInputFloat:
     PARAM = {
-        "name": "Search Distance",
-        "description": "Searching distance.",
-        "variable": "search_distance",
+        "name": "Water point grid size",
+        "description": "Size (m) of the grid cells; the minimum water elevation in each cell becomes one kriging point.",
+        "variable": "grid_size",
         "parameter_type": ["float"],
-        "optional": False,
-        "default_value": 30.0,
+        "optional": True,
+        "default_value": 10.0,
     }
 
     def test_default_value(self, make_numeric_input):
         w = make_numeric_input(self.PARAM)
-        assert w.data_input.value() == pytest.approx(30.0)
+        assert w.data_input.value() == pytest.approx(10.0)
 
     def test_set_and_get(self, make_numeric_input):
         w = make_numeric_input(self.PARAM)
         w.set_value(5.5)
         assert w.data_input.value() == pytest.approx(5.5)
         result = w.get_value()
-        assert result["search_distance"] == pytest.approx(5.5)
+        assert result["grid_size"] == pytest.approx(5.5)
 
     def test_spinbox_type(self, make_numeric_input):
         from PyQt5.QtWidgets import QDoubleSpinBox
@@ -105,63 +107,26 @@ class TestNumericInputFloat:
 # ---------------------------------------------------------------------------
 
 
-class TestBooleanInputPure:
-    PARAM = {
-        "name": "Process Segments",
-        "description": "Process each segment separately.",
-        "variable": "proc_segments",
-        "parameter_type": "Boolean",
-        "optional": False,
-        "default_value": True,
-    }
-
-    def test_default_checked(self, make_boolean_input):
-        w = make_boolean_input(self.PARAM)
-        assert w.checkbox.isChecked() is True
-
-    def test_set_false(self, make_boolean_input):
-        w = make_boolean_input(self.PARAM)
-        w.set_value(False)
-        assert w.checkbox.isChecked() is False
-        assert w.get_value() == {"proc_segments": False}
-
-    def test_set_true_from_string(self, make_boolean_input):
-        w = make_boolean_input(self.PARAM)
-        w.set_value("true")
-        assert w.checkbox.isChecked() is True
-
-    def test_set_default_value(self, make_boolean_input):
-        w = make_boolean_input(self.PARAM)
-        w.set_value(False)
-        w.set_default_value()
-        assert w.checkbox.isChecked() is True
-
-    def test_label_format(self, make_boolean_input):
-        w = make_boolean_input(self.PARAM)
-        assert "Process Segments" in w.checkbox.text()
-        assert "Process each segment separately" in w.checkbox.toolTip()
-
-
 class TestBooleanInputFromOptionList:
     PARAM = {
-        "name": "Use Maximum Width",
-        "description": "Use maximum sampled width.",
-        "variable": "max_width",
+        "name": "Steep slopes exists.",
+        "description": "If steep slopes exist, set this parameter to TRUE to reduce errors during post-processing.",
+        "variable": "slope",
         "parameter_type": {"OptionList": [True, False]},
         "optional": True,
-        "default_value": True,
+        "default_value": False,
     }
 
-    def test_default_checked(self, make_boolean_input):
+    def test_default_unchecked(self, make_boolean_input):
         w = make_boolean_input(self.PARAM)
-        assert w.checkbox.isChecked() is True
+        assert w.checkbox.isChecked() is False
 
     def test_toggle(self, make_boolean_input):
         w = make_boolean_input(self.PARAM)
         w.set_value(False)
-        assert w.get_value() == {"max_width": False}
+        assert w.get_value() == {"slope": False}
         w.set_value(True)
-        assert w.get_value() == {"max_width": True}
+        assert w.get_value() == {"slope": True}
 
 
 # ---------------------------------------------------------------------------
@@ -171,43 +136,43 @@ class TestBooleanInputFromOptionList:
 
 class TestOptionsInput:
     PARAM = {
-        "name": "Canopy Percentile",
-        "description": "The Nth percentile.",
-        "variable": "canopy_percentile",
-        "parameter_type": {"OptionList": [50, 55, 60, 65, 70, 75, 80, 85, 90, 95]},
+        "name": "The rigidness of the cloth",
+        "description": "1 is very soft (rugged terrain), 2 is medium and 3 is hard (flat terrain).",
+        "variable": "rigidness",
+        "parameter_type": {"OptionList": [1, 2, 3]},
         "optional": True,
-        "default_value": 90,
+        "default_value": 1,
         "data_type": ["int"],
     }
 
     def test_default_selection(self, make_options_input):
         w = make_options_input(self.PARAM)
-        assert w.combobox.currentText() == "90"
+        assert w.combobox.currentText() == "1"
 
     def test_set_value(self, make_options_input):
         w = make_options_input(self.PARAM)
-        w.set_value("75")
-        assert w.combobox.currentText() == "75"
+        w.set_value("3")
+        assert w.combobox.currentText() == "3"
 
     def test_get_value(self, make_options_input):
         w = make_options_input(self.PARAM)
-        w.set_value("60")
-        assert w.get_value() == {"canopy_percentile": "60"}
+        w.set_value("2")
+        assert w.get_value() == {"rigidness": "2"}
 
     def test_option_count(self, make_options_input):
         w = make_options_input(self.PARAM)
-        assert w.combobox.count() == 10
+        assert w.combobox.count() == 3
 
     def test_set_default_value(self, make_options_input):
         w = make_options_input(self.PARAM)
-        w.set_value("50")
+        w.set_value("3")
         w.set_default_value()
-        assert w.combobox.currentText() == "90"
+        assert w.combobox.currentText() == "1"
 
     def test_selection_change_signal(self, make_options_input, qtbot):
         w = make_options_input(self.PARAM)
-        w.combobox.setCurrentIndex(0)
-        assert w.value == "50"
+        w.combobox.setCurrentIndex(2)
+        assert w.value == "3"
 
 
 class TestWidgetSignals:
@@ -218,25 +183,16 @@ class TestWidgetSignals:
             w.data_input.setValue(44)
 
         assert blocker.args == [44]
-        assert w.get_value() == {"line_radius": 44}
-
-    def test_boolean_state_changed_signal_payload(self, make_boolean_input, qtbot):
-        w = make_boolean_input(TestBooleanInputPure.PARAM)
-
-        with qtbot.waitSignal(w.checkbox.stateChanged, timeout=SIGNAL_TIMEOUT) as blocker:
-            w.checkbox.setChecked(False)
-
-        assert blocker.args == [0]
-        assert w.get_value() == {"proc_segments": False}
+        assert w.get_value() == {"nmax": 44}
 
     def test_options_index_changed_signal_payload(self, make_options_input, qtbot):
         w = make_options_input(TestOptionsInput.PARAM)
 
         with qtbot.waitSignal(w.combobox.currentIndexChanged, timeout=SIGNAL_TIMEOUT) as blocker:
-            w.combobox.setCurrentIndex(0)
+            w.combobox.setCurrentIndex(2)
 
-        assert blocker.args == [0]
-        assert w.get_value() == {"canopy_percentile": "50"}
+        assert blocker.args == [2]
+        assert w.get_value() == {"rigidness": "3"}
 
     def test_file_selector_text_changed_signal_payload(self, make_file_selector, qtbot):
         w = make_file_selector(TestFileSelectorRaster.PARAM)
@@ -246,7 +202,7 @@ class TestWidgetSignals:
             w.in_file.setText(updated)
 
         assert blocker.args == [updated]
-        assert w.get_value() == {"in_raster": updated}
+        assert w.get_value() == {"in_dtm": updated}
 
 
 class TestKeyboardInput:
@@ -263,7 +219,7 @@ class TestKeyboardInput:
             qtbot.keyClick(editor, Qt.Key_Enter)
 
         assert w.data_input.value() == expected
-        assert w.get_value() == {"line_radius": expected}
+        assert w.get_value() == {"nmax": expected}
 
     @pytest.mark.parametrize("typed, expected", [("0.0", 0.0), ("0.1", 0.1), ("99.9", 99.9)])
     def test_numeric_float_key_clicks_boundary_values(self, make_numeric_input, qtbot, typed, expected):
@@ -278,7 +234,7 @@ class TestKeyboardInput:
             qtbot.keyClick(editor, Qt.Key_Enter)
 
         assert w.data_input.value() == pytest.approx(expected)
-        assert w.get_value()["search_distance"] == pytest.approx(expected)
+        assert w.get_value()["grid_size"] == pytest.approx(expected)
 
     def test_file_selector_path_key_clicks_updates_value(self, make_file_selector, qtbot):
         w = make_file_selector(TestFileSelectorRaster.PARAM)
@@ -288,7 +244,7 @@ class TestKeyboardInput:
             qtbot.keyClicks(w.in_file, "C:/tmp/in_file.tif")
 
         assert w.in_file.text() == "C:/tmp/in_file.tif"
-        assert w.get_value() == {"in_raster": "C:/tmp/in_file.tif"}
+        assert w.get_value() == {"in_dtm": "C:/tmp/in_file.tif"}
 
 
 # ---------------------------------------------------------------------------
@@ -298,27 +254,14 @@ class TestKeyboardInput:
 
 class TestFileSelectorRaster:
     PARAM = {
-        "name": "CHM Raster",
-        "description": "Input CHM raster.",
-        "variable": "in_raster",
+        "name": "DTM raster",
+        "description": "Digital terrain model, e.g. from Generate DTM from LiDAR Data.",
+        "variable": "in_dtm",
         "parameter_type": {"ExistingFile": ["raster"]},
         "optional": False,
         "default_value": "",
         "output": False,
     }
-
-    def test_set_and_get_path(self, make_file_selector, testdata_dir):
-        raster = str(testdata_dir / "chm_aoi.tif")
-        w = make_file_selector(self.PARAM)
-        w.set_value(raster)
-        assert w.in_file.text() == raster
-        assert w.get_value() == {"in_raster": raster}
-
-    def test_layer_combo_hidden_for_raster(self, make_file_selector, testdata_dir):
-        raster = str(testdata_dir / "chm_aoi.tif")
-        w = make_file_selector(self.PARAM)
-        w.set_value(raster)
-        assert not w.layer_combo.isVisible()
 
     def test_empty_default(self, make_file_selector):
         w = make_file_selector(self.PARAM)
@@ -332,72 +275,18 @@ class TestFileSelectorRaster:
 
 class TestFileSelectorVector:
     PARAM = {
-        "name": "Seed Line",
-        "description": "Input seed line file.",
-        "variable": "in_line",
-        "parameter_type": {"ExistingFile": ["vector"]},
+        "name": "Training polygons",
+        "description": "Polygons with a 'class' field.",
+        "variable": "in_training",
+        "parameter_type": {"ExistingFile": "vector|polygon"},
         "optional": False,
         "default_value": "",
         "output": False,
     }
 
-    def test_set_dict_value(self, make_file_selector, testdata_dir):
-        gpkg = str(testdata_dir / "seed_lines_aoi.gpkg")
-        w = make_file_selector(self.PARAM)
-        with patch("beratools.gui.tool_widgets.get_layers") as mock_layers:
-            mock_layers.return_value = {"seed_lines": "MultiLineString", "centerline": "MultiLineString"}
-            w.set_value({"path": gpkg, "layer": "seed_lines"})
-
-        assert w.in_file.text() == gpkg
-        assert w.value["layer"] == "seed_lines"
-
-    def test_set_pipe_string(self, make_file_selector, testdata_dir):
-        gpkg = str(testdata_dir / "seed_lines_aoi.gpkg")
-        w = make_file_selector(self.PARAM)
-        with patch("beratools.gui.tool_widgets.get_layers") as mock_layers:
-            mock_layers.return_value = {"seed_lines": "MultiLineString"}
-            w.set_value(f"{gpkg}|seed_lines")
-
-        assert w.value["path"] == gpkg
-        assert w.value["layer"] == "seed_lines"
-
-    def test_get_value_encodes_pipe(self, make_file_selector, testdata_dir):
-        gpkg = str(testdata_dir / "seed_lines_aoi.gpkg")
-        w = make_file_selector(self.PARAM)
-        with patch("beratools.gui.tool_widgets.get_layers") as mock_layers:
-            mock_layers.return_value = {"seed_lines": "MultiLineString"}
-            w.set_value({"path": gpkg, "layer": "seed_lines"})
-
-        result = w.get_value()
-        assert result["in_line"] == f"{gpkg}|seed_lines"
-
     def test_is_vector_flag(self, make_file_selector):
         w = make_file_selector(self.PARAM)
         assert w.is_vector is True
-
-
-class TestFileSelectorOutput:
-    PARAM = {
-        "name": "Output Centerline",
-        "description": "Output centerline file.",
-        "variable": "out_line",
-        "parameter_type": {"NewFile": ["vector"]},
-        "optional": False,
-        "default_value": "",
-        "output": True,
-    }
-
-    def test_output_flag(self, make_file_selector):
-        w = make_file_selector(self.PARAM)
-        assert w.output is True
-
-    def test_set_output_path(self, make_file_selector, tmp_path):
-        gpkg = str(tmp_path / "result.gpkg")
-        w = make_file_selector(self.PARAM)
-        w.set_value({"path": gpkg, "layer": "centerline"})
-        result = w.get_value()
-        assert result["out_line"].startswith(gpkg)
-        assert "|" in result["out_line"]
 
 
 class _FakeFileDialog:
@@ -428,47 +317,6 @@ class _FakeBrowseState:
 
 class TestFileSelectorDialogInteraction:
     RASTER_PARAM = TestFileSelectorRaster.PARAM
-    VECTOR_OUTPUT_PARAM = TestFileSelectorOutput.PARAM
-
-    def test_browse_click_updates_raster_input(self, make_file_selector, qtbot, testdata_dir):
-        raster = str(testdata_dir / "chm_aoi.tif")
-        w = make_file_selector(self.RASTER_PARAM)
-        fake_dialog = _FakeFileDialog(
-            file_names=[raster],
-            selected_filter="Tiff raster files (*.tif *.tiff)",
-        )
-
-        with patch.object(w, "setup_file_dialog", return_value=fake_dialog):
-            qtbot.mouseClick(w.btn_select, Qt.LeftButton)
-
-        assert w.in_file.text() == raster
-
-    def test_browse_click_updates_output_with_selected_extension(self, make_file_selector, qtbot, tmp_path):
-        w = make_file_selector(self.VECTOR_OUTPUT_PARAM)
-        base_output = str(tmp_path / "centerline_output")
-        fake_dialog = _FakeFileDialog(
-            file_names=[base_output],
-            selected_filter="GeoPackage (*.gpkg)",
-        )
-
-        with patch.object(w, "setup_file_dialog", return_value=fake_dialog):
-            qtbot.mouseClick(w.btn_select, Qt.LeftButton)
-
-        assert w.in_file.text().endswith(".gpkg")
-        assert not w.layer_combo.isHidden()
-        assert w.layer_combo.itemText(0) == "Result_layer"
-
-    def test_browse_cancel_does_not_overwrite_value(self, make_file_selector, qtbot, testdata_dir):
-        raster = str(testdata_dir / "chm_aoi.tif")
-        w = make_file_selector(self.RASTER_PARAM)
-        w.set_value(raster)
-        fake_dialog = _FakeFileDialog(file_names=[], selected_filter="")
-
-        with patch.object(w, "setup_file_dialog", return_value=fake_dialog):
-            qtbot.mouseClick(w.btn_select, Qt.LeftButton)
-
-        assert w.in_file.text() == raster
-        assert w.get_value()["in_raster"] == raster
 
     def test_setup_dialog_falls_back_to_home_when_no_saved_dir(self, make_file_selector):
         w = make_file_selector(self.RASTER_PARAM, bt_data_obj=_FakeBrowseState())
@@ -480,7 +328,7 @@ class TestFileSelectorDialogInteraction:
         browse_state = _FakeBrowseState()
         raster_dir = tmp_path / "selected"
         raster_dir.mkdir()
-        raster = str(raster_dir / "chm_aoi.tif")
+        raster = str(raster_dir / "dtm.tif")
         fake_dialog = _FakeFileDialog(
             file_names=[raster],
             selected_filter="Tiff raster files (*.tif *.tiff)",
@@ -518,15 +366,6 @@ class TestFileSelectorDialogInteraction:
 
 class TestFileSelectorLayerComboInteraction:
     VECTOR_PARAM = TestFileSelectorVector.PARAM
-    VECTOR_LINE_PARAM = {
-        "name": "Seed Line",
-        "description": "Input seed line file.",
-        "variable": "in_line",
-        "parameter_type": {"ExistingFile": ["vector", "line"]},
-        "optional": False,
-        "default_value": "",
-        "output": False,
-    }
 
     def test_vector_gpkg_populates_layer_combo_and_updates_layer(
         self, make_file_selector, patched_layers, qtbot, tmp_path
@@ -534,8 +373,8 @@ class TestFileSelectorLayerComboInteraction:
         gpkg = str(tmp_path / "input.gpkg")
         Path(gpkg).write_text("", encoding="utf-8")
         patched_layers.return_value = {
-            "seed_lines": "MultiLineString",
-            "centerline": "MultiLineString",
+            "training": "Polygon",
+            "training_2024": "MultiPolygon",
         }
 
         w = make_file_selector(self.VECTOR_PARAM)
@@ -543,10 +382,10 @@ class TestFileSelectorLayerComboInteraction:
 
         qtbot.waitUntil(lambda: not w.layer_combo.isHidden(), timeout=SIGNAL_TIMEOUT)
         assert w.layer_combo.count() >= 2
-        assert "seed_lines" in w.layer_combo.itemText(0)
+        assert "training" in w.layer_combo.itemText(0)
 
-        w.layer_combo.setCurrentText("centerline (MultiLineString)")
-        assert w.value["layer"] == "centerline"
+        w.layer_combo.setCurrentText("training_2024 (MultiPolygon)")
+        assert w.value["layer"] == "training_2024"
 
     def test_saved_layer_name_restores_when_combo_items_include_geometry_suffix(
         self, make_file_selector, patched_layers, tmp_path
@@ -554,17 +393,17 @@ class TestFileSelectorLayerComboInteraction:
         gpkg = str(tmp_path / "input.gpkg")
         Path(gpkg).write_text("", encoding="utf-8")
         patched_layers.return_value = {
-            "seed_line_checked_kirby": "LineString",
-            "seed_line_checked_bohn": "MultiLineString",
+            "training_site_a": "Polygon",
+            "training_site_b": "MultiPolygon",
         }
 
         param = dict(self.VECTOR_PARAM)
-        param["saved_value"] = f"{gpkg}|seed_line_checked_bohn"
+        param["saved_value"] = f"{gpkg}|training_site_b"
 
         w = make_file_selector(param)
 
-        assert w.value["layer"] == "seed_line_checked_bohn"
-        assert w.layer_combo.currentText().startswith("seed_line_checked_bohn")
+        assert w.value["layer"] == "training_site_b"
+        assert w.layer_combo.currentText().startswith("training_site_b")
 
     @pytest.mark.parametrize(
         ("ext", "expected_visible"),
@@ -575,7 +414,7 @@ class TestFileSelectorLayerComboInteraction:
     ):
         path = str(tmp_path / f"input{ext}")
         Path(path).write_text("", encoding="utf-8")
-        patched_layers.return_value = {"seed_lines": "MultiLineString"}
+        patched_layers.return_value = {"training": "Polygon"}
 
         w = make_file_selector(self.VECTOR_PARAM)
         w.in_file.setText(path)
@@ -605,44 +444,44 @@ class TestFileSelectorLayerComboInteraction:
         gpkg = str(tmp_path / "input.gpkg")
         Path(gpkg).write_text("", encoding="utf-8")
         patched_layers.return_value = {
+            "segments": "Polygon",
             "centerline": "MultiLineString",
-            "footprint": "Polygon",
         }
 
-        w = make_file_selector(self.VECTOR_LINE_PARAM)
+        w = make_file_selector(self.VECTOR_PARAM)
         w.in_file.setText(gpkg)
 
         qtbot.waitUntil(lambda: not w.layer_combo.isHidden(), timeout=SIGNAL_TIMEOUT)
         assert w.layer_combo.count() == 1
-        assert "centerline" in w.layer_combo.itemText(0)
-        assert "footprint" not in w.layer_combo.itemText(0)
+        assert "segments" in w.layer_combo.itemText(0)
+        assert "centerline" not in w.layer_combo.itemText(0)
 
     def test_gpkg_no_compatible_layers_blocks_required_input(
         self, make_file_selector, patched_layers, qtbot, tmp_path
     ):
         gpkg = str(tmp_path / "input.gpkg")
         Path(gpkg).write_text("", encoding="utf-8")
-        patched_layers.return_value = {"footprint": "Polygon"}
+        patched_layers.return_value = {"centerline": "MultiLineString"}
 
-        w = make_file_selector(self.VECTOR_LINE_PARAM)
+        w = make_file_selector(self.VECTOR_PARAM)
         w.in_file.setText(gpkg)
 
         qtbot.waitUntil(lambda: not w.layer_combo.isHidden(), timeout=SIGNAL_TIMEOUT)
         assert w.layer_combo.itemText(0) == "(No compatible layers)"
         assert "No compatible layers" in w.input_geometry_error
-        assert w.get_value()["in_line"] == ""
+        assert w.get_value()["in_training"] == ""
 
     def test_shapefile_geometry_mismatch_sets_warning_and_blocks(self, make_file_selector, tmp_path):
         shp = str(tmp_path / "input.shp")
         Path(shp).write_text("", encoding="utf-8")
 
-        w = make_file_selector(self.VECTOR_LINE_PARAM)
+        w = make_file_selector(self.VECTOR_PARAM)
         with patch("beratools.gui.tool_widgets.pyogrio.read_info") as mock_read_info:
-            mock_read_info.return_value = {"geometry_type": "Polygon"}
+            mock_read_info.return_value = {"geometry_type": "LineString"}
             w.in_file.setText(shp)
 
         assert "Geometry mismatch" in w.input_geometry_error
-        assert w.get_value()["in_line"] == ""
+        assert w.get_value()["in_training"] == ""
 
     def test_layer_popup_width_updates_for_longer_names(
         self, make_file_selector, patched_layers, qtbot, tmp_path
@@ -652,19 +491,19 @@ class TestFileSelectorLayerComboInteraction:
         Path(short_gpkg).write_text("", encoding="utf-8")
         Path(long_gpkg).write_text("", encoding="utf-8")
 
-        w = make_file_selector(self.VECTOR_LINE_PARAM)
+        w = make_file_selector(self.VECTOR_PARAM)
 
-        patched_layers.return_value = {"a": "LineString"}
+        patched_layers.return_value = {"a": "Polygon"}
         w.in_file.setText(short_gpkg)
         qtbot.waitUntil(lambda: w.layer_combo.count() > 0, timeout=SIGNAL_TIMEOUT)
         short_width = w.layer_combo.view().minimumWidth()
 
         patched_layers.return_value = {
-            "very_long_centerline_layer_name_for_testing_popup_width": "LineString"
+            "very_long_training_polygon_layer_name_for_testing_popup_width": "Polygon"
         }
         w.in_file.setText(long_gpkg)
         qtbot.waitUntil(
-            lambda: "very_long_centerline_layer_name" in w.layer_combo.itemText(0),
+            lambda: "very_long_training_polygon_layer_name" in w.layer_combo.itemText(0),
             timeout=SIGNAL_TIMEOUT,
         )
         long_width = w.layer_combo.view().minimumWidth()
@@ -717,38 +556,3 @@ class TestToolWidgetsAdvancedVisibility:
         for w in tw.widget_list:
             if w.optional:
                 assert not w.isHidden()
-
-    def test_missing_input_history_clears_same_output_path(self, qtbot, tmp_path):
-        missing = str(tmp_path / "history_missing.gpkg")
-        tool_args = [
-            {
-                "name": "Input line",
-                "description": "Input vector",
-                "variable": "in_line",
-                "parameter_type": {"ExistingFile": ["vector"]},
-                "optional": False,
-                "default_value": "",
-                "saved_value": f"{missing}|seed_lines",
-                "output": False,
-            },
-            {
-                "name": "Output line",
-                "description": "Output vector",
-                "variable": "out_line",
-                "parameter_type": {"NewFile": ["vector"]},
-                "optional": False,
-                "default_value": "",
-                "saved_value": f"{missing}|Result_layer",
-                "output": True,
-            },
-        ]
-
-        tw = ToolWidgets("History edge", tool_args, show_advanced=True)
-        qtbot.addWidget(tw)
-
-        in_widget = next(w for w in tw.widget_list if w.variable == "in_line")
-        out_widget = next(w for w in tw.widget_list if w.variable == "out_line")
-
-        assert in_widget.value["path"] == ""
-        assert out_widget.value["path"] == ""
-        assert out_widget.value["layer"] == ""

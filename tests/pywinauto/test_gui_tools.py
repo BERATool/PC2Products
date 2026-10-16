@@ -1,14 +1,14 @@
 """
-GUI tests for BERA Tools using pywinauto.
+GUI tests for the PC2Products tools in the BERA Tools GUI, using pywinauto.
 
-These tests launch the BERA Tools GUI, interact with widgets, and verify
-that form-filling works for each tool. They do NOT run the actual tools
-(they fill forms and cancel immediately).
+These tests launch the GUI, interact with widgets, and verify that form-filling
+works for each PC2Products tool. They do NOT run the actual tools (they fill
+forms only).
 
 Requirements:
     - pywinauto installed
     - A display (no headless)
-    - Test data in tests/data/
+    - The sample LiDAR tiles in tests/data/LiDAR/
 
 Run:
     python -m pytest tests/pywinauto/ -v -m gui
@@ -30,8 +30,19 @@ from conftest import (
     set_option_combo,
     set_slider,
 )
+from gui_test_config import ALL_TOOL_NAMES, TOOL_PARAM_LABELS
 
 pytestmark = pytest.mark.gui
+
+SURFACE_WATER = "Surface Water Mapping"
+DTW = "Depth-to-Water from Surface Water"
+CSF = "Ground Classify Using CSF"
+DTM = "Generate DTM from LiDAR Data"
+HUMMOCK_HOLLOW = "Detect Hummock and Hollow from LiDAR Data"
+
+
+def _label(tool_name, variable):
+    return TOOL_PARAM_LABELS[tool_name][variable]
 
 
 # ---------------------------------------------------------------------------
@@ -79,37 +90,16 @@ class TestMainWindowBasics:
 
 
 class TestToolSelection:
-    """Test selecting each tool from the tree view."""
+    """Test selecting each PC2Products tool from the tree view."""
 
-    EXPECTED_LABEL_BY_TOOL = {
-        "Check Seed Lines": "Seed Line",
-        "Vertex Optimization": "Vertex searching distance (m)",
-        "Centerline": "Seed Line",
-        "Canopy Footprint (Absolute Threshold)": "Centerline",
-        "Canopy Footprint (Relative Threshold)": "Centerline",
-        "Ground Footprint": "Centerline",
-        "Feature Buffer": "Buffer Distance (m)",
-    }
-
-    @pytest.mark.parametrize(
-        "tool_name",
-        [
-            "Check Seed Lines",
-            "Vertex Optimization",
-            "Centerline",
-            "Canopy Footprint (Absolute Threshold)",
-            "Canopy Footprint (Relative Threshold)",
-            "Ground Footprint",
-            "Feature Buffer",
-        ],
-    )
+    @pytest.mark.parametrize("tool_name", ALL_TOOL_NAMES)
     def test_select_tool(self, bera_app, tool_name):
-        """Each tool should be selectable from the tree view."""
+        """Each tool should be selectable, showing the label of its first parameter."""
         select_tool(bera_app, tool_name)
         time.sleep(0.3)
-        # Verify selection via stable parameter label in right panel.
+        # Verify selection via a stable parameter label in the right panel.
         texts = [w.window_text() for w in bera_app.descendants(control_type="Text")]
-        expected_label = self.EXPECTED_LABEL_BY_TOOL[tool_name]
+        expected_label = next(iter(TOOL_PARAM_LABELS[tool_name].values()))
         assert any(expected_label in t for t in texts), (
             f"Expected label '{expected_label}' for tool '{tool_name}' not found in UI labels"
         )
@@ -160,66 +150,12 @@ class TestSlider:
 # ---------------------------------------------------------------------------
 
 
-class TestCheckSeedLines:
-    """Test form filling for Check Seed Lines tool."""
+class TestFillForm:
+    """Fill every parameter of each PC2Products tool, with advanced options shown."""
 
-    def test_fill_form(self, bera_app, test_data):
-        params = test_data["Check Seed Lines"]
-        fill_tool_form(bera_app, "Check Seed Lines", params)
-        time.sleep(0.3)
-
-
-class TestVertexOptimization:
-    """Test form filling for Vertex Optimization tool."""
-
-    def test_fill_form(self, bera_app, test_data):
-        params = test_data["Vertex Optimization"]
-        fill_tool_form(bera_app, "Vertex Optimization", params)
-        time.sleep(0.3)
-
-
-class TestCenterline:
-    """Test form filling for Centerline tool."""
-
-    def test_fill_form(self, bera_app, test_data):
-        params = test_data["Centerline"]
-        fill_tool_form(bera_app, "Centerline", params)
-        time.sleep(0.3)
-
-
-class TestCanopyFootprintAbsolute:
-    """Test form filling for Canopy Footprint (Absolute Threshold) tool."""
-
-    def test_fill_form(self, bera_app, test_data):
-        params = test_data["Canopy Footprint (Absolute Threshold)"]
-        fill_tool_form(bera_app, "Canopy Footprint (Absolute Threshold)", params)
-        time.sleep(0.3)
-
-
-class TestCanopyFootprintRelative:
-    """Test form filling for Canopy Footprint (Relative Threshold) tool."""
-
-    def test_fill_form(self, bera_app, test_data):
-        params = test_data["Canopy Footprint (Relative Threshold)"]
-        fill_tool_form(bera_app, "Canopy Footprint (Relative Threshold)", params)
-        time.sleep(0.3)
-
-
-class TestGroundFootprint:
-    """Test form filling for Ground Footprint tool."""
-
-    def test_fill_form(self, bera_app, test_data):
-        params = test_data["Ground Footprint"]
-        fill_tool_form(bera_app, "Ground Footprint", params)
-        time.sleep(0.3)
-
-
-class TestFeatureBuffer:
-    """Test form filling for Feature Buffer tool."""
-
-    def test_fill_form(self, bera_app, test_data):
-        params = test_data["Feature Buffer"]
-        fill_tool_form(bera_app, "Feature Buffer", params)
+    @pytest.mark.parametrize("tool_name", ALL_TOOL_NAMES)
+    def test_fill_form(self, bera_app, test_data, tool_name):
+        fill_tool_form(bera_app, tool_name, test_data[tool_name])
         time.sleep(0.3)
 
 
@@ -231,30 +167,30 @@ class TestFeatureBuffer:
 class TestFileDialog:
     """Test the file browse dialog explicitly."""
 
-    def test_browse_and_select_gpkg(self, bera_app, testdata_dir):
-        """Open file dialog via browse button and select a gpkg file."""
-        select_tool(bera_app, "Check Seed Lines")
+    def test_browse_and_select_gpkg(self, bera_app, test_data):
+        """Open the file dialog for the training polygons and select a GeoPackage."""
+        select_tool(bera_app, SURFACE_WATER)
         time.sleep(0.5)
 
-        gpkg_path = str(testdata_dir / "integration_aoi.gpkg")
-        click_browse_and_set_file(bera_app, "Seed Line", gpkg_path)
+        training = test_data[SURFACE_WATER]["in_training"]
+        click_browse_and_set_file(bera_app, _label(SURFACE_WATER, "in_training"), training["path"])
         time.sleep(1)
 
         # Verify the layer combo appeared (gpkg triggers layer loading)
         try:
             combo = bera_app.child_window(control_type="ComboBox", found_index=1)
             if combo.exists(timeout=3) and combo.is_visible():
-                select_gpkg_layer(bera_app, "seed_lines_checked")
+                select_gpkg_layer(bera_app, training["layer"])
         except Exception:
-            pass  # layer combo may not appear if file doesn't exist on disk
+            pass  # layer combo may not appear if the dialog did not accept the file
 
-    def test_browse_and_select_tif(self, bera_app, testdata_dir):
-        """Open file dialog via browse button and select a tif file."""
-        select_tool(bera_app, "Vertex Optimization")
+    def test_browse_and_select_tif(self, bera_app, test_data):
+        """Open the file dialog for the orthomosaic and select a GeoTIFF."""
+        select_tool(bera_app, SURFACE_WATER)
         time.sleep(0.5)
 
-        tif_path = str(testdata_dir / "chm_aoi.tif")
-        click_browse_and_set_file(bera_app, "CHM Raster", tif_path)
+        ortho = test_data[SURFACE_WATER]["in_ortho"]["path"]
+        click_browse_and_set_file(bera_app, _label(SURFACE_WATER, "in_ortho"), ortho)
         time.sleep(0.5)
 
 
@@ -264,19 +200,21 @@ class TestFileDialog:
 
 
 class TestNumericInput:
-    """Test QSpinBox and QDoubleSpinBox interactions."""
+    """Test QSpinBox and QDoubleSpinBox interactions (Depth-to-Water advanced options)."""
 
     def test_set_float_value(self, bera_app):
-        select_tool(bera_app, "Vertex Optimization")
-        time.sleep(0.5)
-        set_numeric(bera_app, 10.0, spinner_index=0)
-
-    def test_set_int_value(self, bera_app):
-        select_tool(bera_app, "Vertex Optimization")
+        select_tool(bera_app, DTW)
         time.sleep(0.5)
         bera_app.child_window(title_re=".*Advanced Options.*", control_type="Button").click_input()
         time.sleep(0.3)
-        set_numeric(bera_app, 20, param_label="Line Processing Radius")
+        set_numeric(bera_app, 5.0, param_label=_label(DTW, "grid_size"))
+
+    def test_set_int_value(self, bera_app):
+        select_tool(bera_app, DTW)
+        time.sleep(0.5)
+        bera_app.child_window(title_re=".*Advanced Options.*", control_type="Button").click_input()
+        time.sleep(0.3)
+        set_numeric(bera_app, 16, param_label=_label(DTW, "nmax"))
 
 
 # ---------------------------------------------------------------------------
@@ -285,14 +223,16 @@ class TestNumericInput:
 
 
 class TestBooleanInput:
-    """Test QCheckBox interactions."""
+    """Test QCheckBox interactions (the CSF 'slope' option)."""
 
     def test_toggle_checkbox(self, bera_app):
-        select_tool(bera_app, "Centerline")
+        select_tool(bera_app, CSF)
         time.sleep(0.5)
-        set_checkbox(bera_app, "Process Segments", checked=False)
+        bera_app.child_window(title_re=".*Advanced Options.*", control_type="Button").click_input()
         time.sleep(0.3)
-        set_checkbox(bera_app, "Process Segments", checked=True)
+        set_checkbox(bera_app, _label(CSF, "slope"), checked=True)
+        time.sleep(0.3)
+        set_checkbox(bera_app, _label(CSF, "slope"), checked=False)
 
 
 # ---------------------------------------------------------------------------
@@ -303,13 +243,11 @@ class TestBooleanInput:
 class TestOptionsInput:
     """Test QComboBox option selection."""
 
-    def test_select_canopy_percentile(self, bera_app):
-        select_tool(bera_app, "Canopy Footprint (Relative Threshold)")
+    def test_select_dtm_style(self, bera_app):
+        select_tool(bera_app, DTM)
         time.sleep(0.5)
-        bera_app.child_window(title_re=".*Advanced Options.*", control_type="Button").click_input()
-        time.sleep(0.3)
-        # canopy_percentile is a list type with options [50,55,...,95]
-        set_option_combo(bera_app, "90", combo_index=0)
+        # style is a list type with options [tin, idw, kriging]
+        set_option_combo(bera_app, "kriging", param_label=_label(DTM, "style"))
 
 
 # ---------------------------------------------------------------------------
@@ -321,21 +259,21 @@ class TestLoadDefaults:
     """Test that Load Default Arguments resets form values."""
 
     def test_load_defaults(self, bera_app):
-        select_tool(bera_app, "Vertex Optimization")
+        select_tool(bera_app, HUMMOCK_HOLLOW)
         time.sleep(0.5)
 
-        # Change a numeric value
-        set_numeric(bera_app, 99.0, spinner_index=0)
+        # Change a numeric value (Min_ws, a required parameter, so always visible)
+        set_numeric(bera_app, 9.0, param_label=_label(HUMMOCK_HOLLOW, "Min_ws"))
         time.sleep(0.3)
 
         # Click Load Default Arguments
         click_button(bera_app, "Load Default Arguments")
         time.sleep(0.5)
 
-        # Value should be reset (default is 30.0 for search_distance)
+        # Value should be reset (default is 3.0 for Min_ws)
         spinner = bera_app.child_window(control_type="Spinner", found_index=0)
         try:
             val = spinner.child_window(control_type="Edit").get_value()
-            assert val != "99", "Value was not reset to default"
+            assert not val.startswith("9"), "Value was not reset to default"
         except Exception:
             pass  # can't always read spinner value reliably

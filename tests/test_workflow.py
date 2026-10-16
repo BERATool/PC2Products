@@ -1,4 +1,4 @@
-"""Test script for the tools in the beratools package."""
+"""End-to-end test: run the PC2Products LiDAR tools in sequence, each on the previous output."""
 
 # E2E test for the entire workflow
 def test_full_r_workflow(tool_arguments_r_workflow):

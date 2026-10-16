@@ -77,7 +77,8 @@ class TestDtm:
         _select_option(_find_widget(tw, "style"), "idw")
 
         args = tw.get_widgets_arguments()
-        assert args == {"in_las_folder": las_folder, "out_folder": str(tmp_path), "style": "idw"}
+        assert args == {"in_las_folder": las_folder, "out_folder": str(tmp_path), "style": "idw",
+                        "cell_size": 0.0}
 
         validated = btdata.validate_tool_params(self.TOOL, args)
         assert validated == args
@@ -108,6 +109,42 @@ class TestChmDsm:
 
     def test_invalid_style_rejected(self, btdata, las_folder, tmp_path):
         args = {"in_las_folder": las_folder, "out_folder": str(tmp_path), "style": "kriging"}
+        with pytest.raises(ValueError, match="style"):
+            btdata.validate_tool_params(self.TOOL, args)
+
+
+# ---------------------------------------------------------------------------
+# Normalize LiDAR Data (rpy_normalized_PC)
+# ---------------------------------------------------------------------------
+
+
+class TestNormalize:
+    TOOL = "Normalize LiDAR Data"
+
+    def test_widget_types(self, make_tool_widget, btdata):
+        tw = make_tool_widget(self.TOOL)
+        assert len(tw.widget_list) == len(btdata.get_bera_tool_args(self.TOOL))
+        assert isinstance(_find_widget(tw, "in_las_folder"), FileSelector)
+        assert isinstance(_find_widget(tw, "out_folder"), FileSelector)
+        assert isinstance(_find_widget(tw, "style"), OptionsInput)
+
+    def test_style_options(self, make_tool_widget):
+        tw = make_tool_widget(self.TOOL)
+        style = _find_widget(tw, "style")
+        assert style.option_list == ["tin", "idw", "kriging"]
+        assert style.get_value() == {"style": "tin"}
+
+    def test_round_trip(self, make_tool_widget, btdata, las_folder, tmp_path):
+        tw = make_tool_widget(self.TOOL)
+        _set_widget_values(tw, {"in_las_folder": las_folder, "out_folder": str(tmp_path)})
+        _select_option(_find_widget(tw, "style"), "kriging")
+
+        args = tw.get_widgets_arguments()
+        assert args == {"in_las_folder": las_folder, "out_folder": str(tmp_path), "style": "kriging"}
+        assert btdata.validate_tool_params(self.TOOL, args) == args
+
+    def test_invalid_style_rejected(self, btdata, las_folder, tmp_path):
+        args = {"in_las_folder": las_folder, "out_folder": str(tmp_path), "style": "pitfree"}
         with pytest.raises(ValueError, match="style"):
             btdata.validate_tool_params(self.TOOL, args)
 

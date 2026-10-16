@@ -24,6 +24,7 @@ ALL_TOOL_NAMES = [
     "Raster Cell size from LiDAR data",
     "Detect Hummock and Hollow from LiDAR Data",
     "Ground Classify Using CSF",
+    "Normalize LiDAR Data",
     "Surface Water Mapping",
     "Depth-to-Water from Surface Water",
     "Seismic Line Disturbance Analysis",
@@ -168,7 +169,7 @@ class TestButtonInteractions:
             patch.object(
                 main_window.tool_widget,
                 "get_widgets_arguments",
-                return_value={"in_raster": "in_raster.tif"},
+                return_value={"in_las_folder": "LiDAR"},
             ),
             patch.object(main_window, "save_tool_parameter"),
             patch("beratools.gui.bt_gui_main.bt.prepare_tool_run", return_value=("fake_tool", ["--arg"])),
@@ -536,6 +537,23 @@ class TestProcessSignals:
         assert main_window.process is None
         assert main_window.progress_bar.value() == 0
         assert main_window.progress_label.text() == ""
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "R_PROGRESS:80\r\n",
+            # lidR's progress bar clears itself with spaces and carriage returns, without a newline
+            "          \r\r                    \rR_PROGRESS:80\r\n",
+        ],
+    )
+    def test_r_progress_line_sets_progress_and_is_not_logged(self, main_window, line):
+        main_window.clear_log_messages()
+        main_window.progress_bar.setValue(0)
+
+        main_window.custom_callback(line)
+
+        assert main_window.progress_bar.value() == 80
+        assert "R_PROGRESS" not in main_window.text_edit.toPlainText()
 
 
 class TestToolHistoryPersistence:

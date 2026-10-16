@@ -3,7 +3,8 @@
 import pytest
 
 # Union of the packages the rpy_* tools check for.
-REQUIRED = ["lidR", "RCSF", "rlas", "future", "terra", "sp", "raster", "stars", "sf", "gstat"]
+REQUIRED = ["lidR", "RCSF", "rlas", "future", "terra", "sp", "raster", "stars", "sf", "gstat",
+            "rpart", "ggplot2"]
 
 
 def test_r_packages():

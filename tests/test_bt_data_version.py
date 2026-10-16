@@ -8,7 +8,7 @@ class _FakeDist:
     def __init__(self, version, path):
         self.version = version
         self._path = path
-        self.metadata = {"Name": "BERATools"}
+        self.metadata = {"Name": "PC2Products"}
 
 
 def test_get_app_version_info_prefers_metadata(monkeypatch):
@@ -68,8 +68,8 @@ def test_get_app_version_info_prefers_runtime_override(monkeypatch):
 
 def test_resolve_metadata_version_selects_highest_and_logs_warning(monkeypatch, caplog):
     dists = [
-        _FakeDist("0.2.5", "C:/env/site-packages/BERATools-0.2.5.dist-info"),
-        _FakeDist("0.3.3", "C:/env/site-packages/BERATools-0.3.3.dist-info"),
+        _FakeDist("0.2.5", "C:/env/site-packages/PC2Products-0.2.5.dist-info"),
+        _FakeDist("0.3.3", "C:/env/site-packages/PC2Products-0.3.3.dist-info"),
     ]
     monkeypatch.setattr(bt_data, "_iter_beratools_distributions", lambda: dists)
 

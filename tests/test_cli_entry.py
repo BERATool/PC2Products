@@ -19,7 +19,7 @@ def fake_tool(monkeypatch):
     return received
 
 
-@pytest.mark.parametrize("alias", ["bt", "beratools"])
+@pytest.mark.parametrize("alias", ["bt", "PC2Products"])
 def test_no_arg_alias_prints_basic_cli_info(capsys, alias):
     code = entry.run(argv=[], prog_name=alias)
     assert code == 0
@@ -98,6 +98,7 @@ def test_parse_and_dispatch_dtm(fake_tool):
         "in_las_folder": "LiDAR",
         "out_folder": "Raster_Output",
         "style": "idw",
+        "cell_size": 0.0,
         "processes": 2,
         "call_mode": "CLI",
         "log_level": "DEBUG",
@@ -205,7 +206,7 @@ def test_missing_required_param_rejected(fake_tool, capsys):
 
 def test_alias_parity_no_arg_output(capsys):
     outputs = []
-    for alias in ("bt", "beratools"):
+    for alias in ("bt", "PC2Products"):
         entry.run(argv=[], prog_name=alias)
         outputs.append(capsys.readouterr().out)
 
@@ -292,6 +293,7 @@ def test_surface_water_converts_numbers(fake_tool):
     assert fake_tool["max_canopy_height"] == pytest.approx(0.5)
     assert fake_tool["min_patch_area"] == pytest.approx(0.04)
     assert fake_tool["seed"] == 1
+    assert fake_tool["tile_size"] == 2000 and type(fake_tool["tile_size"]) is int
     assert fake_tool["in_chm"] is None
 
 
@@ -306,7 +308,8 @@ def test_dtw_converts_numbers_and_checks_model(fake_tool):
     assert fake_tool["nmax"] == 16 and type(fake_tool["nmax"]) is int
     assert fake_tool["variogram_model"] == "Sph"
     assert fake_tool["grid_size"] == pytest.approx(10.0)
-    assert fake_tool["kriging_cell_size"] == pytest.approx(0.0)
+    assert fake_tool["kriging_cell_size"] == pytest.approx(0.01)
+    assert fake_tool["tile_size"] == 1000 and type(fake_tool["tile_size"]) is int
 
 
 def test_dtw_rejects_unknown_variogram_model():

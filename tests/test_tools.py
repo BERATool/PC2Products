@@ -1,4 +1,4 @@
-"""Test script for the tools in the beratools package."""
+"""Integration tests: run each PC2Products LiDAR tool on the sample tiles and check its output."""
 
 from pprint import pprint
 
@@ -40,16 +40,6 @@ def test_rpy_dsm(tool_r_arguments_integration):
     out_file_list = list_files_in_folder(args_rpy_dsm["out_folder"])
     assert has_raster_output(out_file_list,"Merged_*_DSM.tif"), "out_folder no output!"
 
-
-def test_rpy_chm(tool_r_arguments_integration):
-    """Test for CHM/DSM from the LiDAR tool."""
-    args_rpy_chm = tool_r_arguments_integration["args_chm_by"]
-    pprint(args_rpy_chm)
-
-    rpy_chm_dsm_by(**args_rpy_chm)
-
-    out_file_list = list_files_in_folder(args_rpy_chm["out_folder"])
-    assert has_raster_output(out_file_list,"Merged_*_CHM.tif"), "out_folder no output!"
 
 def test_rpy_las_info(tool_r_arguments_integration):
     """Test for LiDAR metadata from the LiDAR tool."""
@@ -99,6 +89,17 @@ def test_normalized_PC(tool_r_arguments_integration):
 
     assert has_lidar_output(out_file, ), "out_folder no output!"
 
+
+# Runs after test_normalized_PC: it reads the normalized tiles that test writes.
+def test_rpy_chm(tool_r_arguments_integration):
+    """Test for CHM/DSM from the LiDAR tool."""
+    args_rpy_chm = tool_r_arguments_integration["args_chm_by"]
+    pprint(args_rpy_chm)
+
+    rpy_chm_dsm_by(**args_rpy_chm)
+
+    out_file_list = list_files_in_folder(args_rpy_chm["out_folder"])
+    assert has_raster_output(out_file_list,"Merged_*_CHM.tif"), "out_folder no output!"
 
 
 # CLEANUP TESTS
