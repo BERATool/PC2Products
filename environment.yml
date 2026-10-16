@@ -4,9 +4,8 @@
 channels:
   - nodefaults
   - conda-forge
-  - appliedgrg
 dependencies:
-  - python=3.12
+  - python>3.11
   - dask
   - gdal>=3.12,<4
   - geopandas
