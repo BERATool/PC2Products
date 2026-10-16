@@ -7,7 +7,7 @@ import beratools.tools.r_common as r_common
 def rpy_dtm(in_las_folder,
             out_folder,
             style,
-            cell_size=0.05,
+            cell_size=0.0,
             processes=0,
             **kwargs,):
 
