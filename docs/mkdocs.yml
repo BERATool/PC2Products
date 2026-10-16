@@ -3,7 +3,7 @@ site_name: PC2Products Guide
 
 theme:
   name: material
-  repo_url: https://github.com/appliedgrg/pc2products
+  repo_url: https://github.com/BERATool/pc2products
   repo_name: GitHub
   palette:
     - media: "(prefers-color-scheme)"
@@ -38,7 +38,7 @@ theme:
   favicon: icons/bera_logo.png
   logo: icons/bera_logo.svg
 
-repo_url: https://github.com/appliedgrg/pc2products
+repo_url: https://github.com/BERATool/pc2products
 repo_name: PC2Products
 edit_uri: edit/main/docs/files/
 

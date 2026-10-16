@@ -57,10 +57,10 @@ doc = [
 
 [project.scripts]
 bt = "beratools.cli.entry:run"
-beratools = "beratools.cli.entry:run"
+PC2Products = "beratools.cli.entry:run"
 
 [project.urls]
-Repository = "https://github.com/appliedgrg/PC2Products"
+Repository = "https://github.com/BERATool/PC2Products"
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -72,7 +72,7 @@ source = "vcs"
 local_scheme = "no-local-version"
 version_scheme = "post-release"
 
-# Not published as a package; built only for the local editable install of `beratools`.
+# Not published as a package; built only for the local editable install of `PC2Products`.
 [tool.hatch.build.targets.wheel]
 packages = ["beratools"]
 

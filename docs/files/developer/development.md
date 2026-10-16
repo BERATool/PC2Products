@@ -12,7 +12,7 @@ These are guidelines for developers of PC2Products. It covers local development 
 ## Clone the repository
 
 ```bash
-git clone https://github.com/appliedgrg/pc2products.git
+git clone https://github.com/BERATool/pc2products.git
 cd pc2products
 ```
 
@@ -33,7 +33,7 @@ installed from CRAN by the tools the first time they run (see
 
 ### Using Conda Environment
 
-Create the environment from [`environment.yml`](https://github.com/appliedgrg/pc2products/blob/main/environment.yml),
+Create the environment from [`environment.yml`](https://github.com/BERATool/pc2products/blob/main/environment.yml),
 then install the local code in editable mode:
 
 ```bash
@@ -48,7 +48,7 @@ The editable mode (`-e`) allows you to make changes to the source code and have 
 
 ### Using Pixi
 
-Pixi sets up the same environment from [`pixi.toml`](https://github.com/appliedgrg/pc2products/blob/main/pixi.toml),
+Pixi sets up the same environment from [`pixi.toml`](https://github.com/BERATool/pc2products/blob/main/pixi.toml),
 and also installs the project (`pc2products`, which provides the `beratools` package) in editable mode, pytest and the docs tools.
 
 1. **Install pixi**
@@ -194,7 +194,7 @@ Recommend IDEs like VSCode or PyCharm that have built-in support for Git and can
 
 ### pyproject.toml
 
-[pyproject.toml](https://github.com/appliedgrg/pc2products/blob/main/pyproject.toml) is the core configuration file used to define the build system, dependencies, and other settings. Other settings include Ruff, mypy, pytest, coverage and markdownlint.
+[pyproject.toml](https://github.com/BERATool/pc2products/blob/main/pyproject.toml) is the core configuration file used to define the build system, dependencies, and other settings. Other settings include Ruff, mypy, pytest, coverage and markdownlint.
 
 #### pyproject.toml Functional Groups
 

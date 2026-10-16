@@ -22,7 +22,7 @@ source, which needs the GDAL, GEOS, PROJ and udunits development libraries (for 
 ## Using conda
 
 ```bash
-git clone https://github.com/appliedgrg/pc2products.git
+git clone https://github.com/BERATool/pc2products.git
 cd pc2products
 conda env create -n PC2Products -f environment.yml
 conda activate PC2Products

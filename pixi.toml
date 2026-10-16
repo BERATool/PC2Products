@@ -2,10 +2,10 @@
 authors = ["Maverick <87385184+Maverick-F@users.noreply.github.com>"]
 channels = ["nodefaults", "conda-forge","appliedgrg",]
 description = "PC2Products: the subset of BERA Tools that turns LiDAR point clouds into raster products"
-name = "pc2products"
+name = "PC2Products"
 platforms = ["win-64", "linux-64"]
 version = "0.1.0"
-repository = "https://github.com/appliedgrg/PC2Products"
+repository = "https://github.com/BERATool/PC2Products"
 
 [tasks]
 main_tk = "python main.py"

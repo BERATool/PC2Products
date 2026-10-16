@@ -26,7 +26,7 @@ flowchart TD
     K2 --> L2[Participate in discussion]
     L2 --> M2([Contribution complete!])
 
-    click E1 "https://github.com/appliedgrg/pc2products/issues" "Submit an Issue"
+    click E1 "https://github.com/BERATool/pc2products/issues" "Submit an Issue"
 ```
 
 ## For Non-developers
