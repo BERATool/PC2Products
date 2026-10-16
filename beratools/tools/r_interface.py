@@ -168,3 +168,7 @@ for d in extra_dirs:
             + os.pathsep
             + os.environ.get("PATH", "")
         )
+
+import os
+
+os.environ["RPY2_CFFI_MODE"] = "ABI"
