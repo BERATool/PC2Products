@@ -421,6 +421,16 @@
                               "default": 1,
                               "output": false,
                               "optional": true
+                          },
+                          {
+                              "variable": "tile_size",
+                              "label": "Tile size (cells)",
+                              "description": "The orthomosaic is classified in square tiles of this many cells per side, in parallel; smaller tiles use less memory per worker.",
+                              "type": "number",
+                              "subtype": "int",
+                              "default": 2000,
+                              "output": false,
+                              "optional": true
                           }
                       ]
                 },
@@ -510,7 +520,17 @@
                               "description": "Cell size (m) for kriging; the result is resampled bilinearly to the DTM. 0 kriges on the DTM grid itself, which is slow for large fine DTMs.",
                               "type": "number",
                               "subtype": "float",
-                              "default": 0.0,
+                              "default": 0.01,
+                              "output": false,
+                              "optional": true
+                          },
+                          {
+                              "variable": "tile_size",
+                              "label": "Tile size (cells)",
+                              "description": "The kriging grid is kriged in square tiles of this many cells per side, in parallel; smaller tiles use less memory per worker.",
+                              "type": "number",
+                              "subtype": "int",
+                              "default": 1000,
                               "output": false,
                               "optional": true
                           }
