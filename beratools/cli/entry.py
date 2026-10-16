@@ -183,8 +183,8 @@ def _resolve_tool_function(tool_api: str):
         from beratools.tools.rpy_normalized_PC import rpy_normalized_PC
         return rpy_normalized_PC
     if tool_api == 'rpy_CHM_DSM_by':
-        from beratools.tools.rpy_CHM_DSM_by import rpy_chm_dsm
-        return rpy_chm_dsm
+        from beratools.tools.rpy_CHM_DSM_by import rpy_chm_dsm_by
+        return rpy_chm_dsm_by
     if tool_api == 'rpy_las_info':
         from beratools.tools.rpy_las_info import rpy_las_info
         return rpy_las_info
