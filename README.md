@@ -732,9 +732,14 @@ The **Pipeline** tab (next to **Tool history**) lets you chain tools without wri
 3. **Inputs from earlier steps** links a step's inputs to earlier steps' outputs, with one choice per
    input. A LiDAR folder can come from **Ground Classify Using CSF** or **Normalize LiDAR Data**, and a
    raster such as `in_dtm` or `in_microform` from the step that makes it; at run time it reads that
-   step's `Merged_*` mosaic (or its single-tile raster). Each input links to the latest earlier step
-   that makes what it needs, reset whenever a step is added, moved or removed; choose **Its own value** to use the path in the form instead. Which inputs and
-   outputs match is set by `accepts` and `produces` in `beratools.json` (see
+   step's `Merged_*` mosaic (or its single-tile raster). Choose **Its own value** to use the path in
+   the form instead.
+
+   Each input links to the latest earlier step that makes what it needs, which is not always the step
+   just before it. In `CSF → DTM → CHM`, the CHM reads the CSF tiles, because the DTM step writes
+   rasters, not point clouds; in `CSF → Normalize → CHM`, it reads the normalized tiles. The links are
+   reset this way whenever a step is added, moved or removed, replacing any you chose by hand. Which
+   inputs and outputs match is set by `accepts` and `produces` in `beratools.json` (see
    [Add a new tool](docs/files/developer/add_new_tool.md)), so new tools join in without code changes.
 4. Click **Run Pipeline**. The steps run one after another with the CPU cores set by the slider, and
    the pipeline stops if a step fails or you click **Cancel**.
