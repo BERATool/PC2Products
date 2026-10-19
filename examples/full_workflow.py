@@ -13,7 +13,7 @@ sys.path.append(Path(__file__).resolve().parents[1].as_posix())
 
 import hydra
 from beratools.tools.rpy_dtm_by import rpy_dtm
-from beratools.tools.rpy_CHM_DSM_by import rpy_chm_dsm
+from beratools.tools.rpy_CHM_DSM_by import rpy_chm_dsm_by
 from beratools.tools.rpy_las_info import rpy_las_info
 from beratools.tools.rpy_PC2hummock_hollow import rpy_hh2raster
 from beratools.tools.rpy_gnd_csf import rpy_gnd_csf
@@ -27,7 +27,7 @@ STEPS = {
     "cellsize": ("Running raster cell size", rpy_find_cellsize),
     "gnd_csf": ("Running CSF ground classification", rpy_gnd_csf),
     "dtm": ("Running DTM", rpy_dtm),
-    "chm_dsm": ("Running CHM/DSM", rpy_chm_dsm),
+    "chm_dsm": ("Running CHM/DSM", rpy_chm_dsm_by),
     "hh": ("Running hummock and hollow", rpy_hh2raster),
 }
 
