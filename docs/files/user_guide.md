@@ -88,6 +88,55 @@ graph TD
 
     `-p/--processes` sets the requested number of workers, and `-l/--log_level` sets the log level.
 
+## Building a pipeline
+
+The **Pipeline** tab, next to **Tool history** in the GUI, chains tools together so they run one
+after another, without writing a script.
+
+1. **Add steps**: drag tools from **Tools available** into the Pipeline tab. Dragging over the tab
+   switches to it. You can also select a tool and click the add button. Drag steps, or use the arrow
+   buttons, to change their order.
+2. **Set each step's parameters**: click a step to open its parameters in the tool form. Your changes
+   are kept in the step.
+3. **Link steps**: **Inputs from earlier steps** sets which earlier step each input reads from, with one
+   choice per input:
+    - a LiDAR folder (`in_las_folder`) can come from **Ground Classify Using CSF** or
+      **Normalize LiDAR Data**;
+    - a raster such as `in_dtm`, `in_microform`, `in_chm`, `in_water` or `in_dtw` can come from the
+      step that makes it. When the pipeline runs, the step reads that step's `Merged_*` mosaic, or its
+      single-tile raster if there is only one tile.
+
+    New steps link to the latest matching step automatically. Linked fields are greyed out in the
+    form and show what they will read, for example `D:/rasters/Merged_*_DTM.tif`. Choose
+    **Its own value** to use the path in the form instead. The list shows each step's links, for
+    example `4. Seismic Line Disturbance Analysis ← steps 2, 3`.
+4. **Run**: click **Run Pipeline**. The steps run in order with the CPU cores set by the slider, and
+   their output streams into the log. The pipeline stops if a step fails, if a linked file is
+   missing, or if you click **Cancel**.
+
+For example, add **Ground Classify Using CSF**, **Generate DTM from LiDAR Data**,
+**Detect Hummock and Hollow from LiDAR Data** and **Seismic Line Disturbance Analysis**. The DTM and
+hummock/hollow steps link to the classified tiles, and the seismic analysis links its `in_dtm` and
+`in_microform` to their rasters. You only set the first step's input folder and each step's output
+folder.
+
+### Saving and running a pipeline without the GUI
+
+The buttons above the list save and load pipelines as `.json` files. A saved pipeline also runs from
+the command line, from the repository root:
+
+```bash
+python -m beratools.core.pipeline my_pipeline.json --processes 4
+```
+
+!!! note
+    A step only counts as failed if its tool exits with an error. Some tools print a warning and
+    stop normally instead, for example **Generate DTM from LiDAR Data** on data that isn't
+    ground-classified. The next step then fails on its missing input, so check the log.
+
+Which inputs can link to which outputs is set in `beratools.json`, so new tools can join pipelines
+without code changes. See [Taking part in pipelines](developer/add_new_tool.md#taking-part-in-pipelines).
+
 ## Example workflow script
 
 `examples/full_workflow.py` runs the LiDAR steps of the typical workflow in one go, driven by
