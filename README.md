@@ -765,26 +765,81 @@ python -m beratools.core.pipeline my_pipeline.json --processes 4
 
 ### Requirements
 
-**Python:** `rpy2` and `psutil`, in addition to the core BERA Tools dependencies (Surface Water
-Mapping and Depth-to-Water also use `rasterio`, one of those, to plan their tiles). The
-[example workflow](#example-workflow) also needs `hydra-core`. All three are in `environment.yml` and
-`pixi.toml`.
+Everything below is in `environment.yml` and `pixi.toml`, except the R packages, which the tools
+install into the environment's R the first time they need them (see
+[How all the tools behave](#how-all-the-tools-behave)).
 
-**R:** `r-base` 4.5.x. The tools install the following packages into it the first time they need
-them (see [How all the tools behave](#how-all-the-tools-behave)):
+#### Python packages
 
-| R package | Purpose |
-|-----------|---------|
-| `lidR` | LAScatalog processing, `rasterize_terrain`, `rasterize_canopy` |
-| `rlas` | Reading LAS/LAZ files |
-| `future` | Parallel processing of catalogs |
-| `terra` | Raster output and mosaicking |
-| `sf`, `units` | CRS, area and map-unit reporting |
-| `RCSF` | Cloth Simulation Filter for ground classification |
-| `gstat` | Kriging interpolation (DTM and water table) |
-| `sp`, `raster`, `stars` | Spatial and raster support |
-| `ggplot2` | Plots from Seismic Line Disturbance Analysis |
-| `rpart` | Decision tree in Surface Water Mapping |
+| Package | Used for |
+|---------|----------|
+| [rpy2](https://rpy2.github.io/) | Calling the R functions from Python |
+| [psutil](https://github.com/giampaolo/psutil) | Available memory, to cap the number of R workers |
+| [PyQt5](https://www.riverbankcomputing.com/software/pyqt/) | The BERA Tools GUI, including the Pipeline tab |
+| [GDAL](https://gdal.org/) (`osgeo`) | Raster and vector I/O, and the GDAL/PROJ data used by the other packages |
+| [rasterio](https://rasterio.readthedocs.io/) | Planning the tiles for Surface Water Mapping and Depth-to-Water, and raster I/O |
+| [pyogrio](https://pyogrio.readthedocs.io/) | Reading vector layers and checking their geometry type in the GUI |
+| [GeoPandas](https://geopandas.org/), [Shapely](https://shapely.readthedocs.io/), [pyproj](https://pyproj4.github.io/pyproj/) | Vector data, geometry and coordinate systems in the shared BERA Tools code |
+| [NumPy](https://numpy.org/), [pandas](https://pandas.pydata.org/), [SciPy](https://scipy.org/) | Arrays, tables and raster operations |
+| [xarray](https://xarray.dev/), [xarray-spatial](https://xarray-spatial.org/) | Raster helpers in `beratools/tools/common.py` |
+| [igraph](https://python.igraph.org/), [networkit](https://networkit.github.io/), [NetworkX](https://networkx.org/) | Graph operations in the bundled polygon centerline code |
+| [tqdm](https://tqdm.github.io/) | Progress bars |
+| [packaging](https://packaging.pypa.io/) | Comparing version numbers when resolving the app version |
+| [dask](https://www.dask.org/), [pandarallel](https://nalepae.github.io/pandarallel/), [scikit-image](https://scikit-image.org/), [tabulate](https://github.com/astanin/python-tabulate), [pyarrow](https://arrow.apache.org/docs/python/) | BERA Tools framework dependencies, kept so the shared code runs unchanged |
+| [Hydra](https://hydra.cc/) (`hydra-core`, `omegaconf`) | The [example workflow](#example-workflow) |
+| [pytest](https://pytest.org/), [pytest-qt](https://pytest-qt.readthedocs.io/), [pytest-cov](https://pytest-cov.readthedocs.io/), [pywinauto](https://pywinauto.readthedocs.io/) | Tests (pywinauto only for the Windows GUI automation) |
+| [Zensical](https://zensical.org/), [mkdocstrings](https://mkdocstrings.github.io/), [PyMdown Extensions](https://facelessuser.github.io/pymdown-extensions/) | Building the documentation |
+| [hatchling](https://hatch.pypa.io/), [hatch-vcs](https://github.com/ofek/hatch-vcs) | Building the package; the version comes from git tags |
+
+#### R packages
+
+[R](https://www.r-project.org/) 4.5.x (`r-base`). The tools install these packages from
+[CRAN](https://cran.r-project.org/) into it:
+
+| R package | Used for |
+|-----------|----------|
+| [lidR](https://r-lidar.github.io/lidRbook/) | LAScatalog processing, `rasterize_terrain`, `rasterize_canopy`, normalization and ground classification |
+| [rlas](https://cran.r-project.org/package=rlas) | Reading and writing LAS/LAZ files |
+| [RCSF](https://cran.r-project.org/package=RCSF) | Cloth Simulation Filter for ground classification |
+| [future](https://future.futureverse.org/) | Parallel processing of catalogs |
+| [terra](https://rspatial.github.io/terra/) | Raster output, mosaicking and the raster analysis tools |
+| [sf](https://r-spatial.github.io/sf/), [units](https://r-quantities.github.io/units/) | CRS, vector data, area and map-unit reporting |
+| [gstat](https://r-spatial.github.io/gstat/) | Kriging interpolation (DTM and water table) |
+| [sp](https://cran.r-project.org/package=sp), [raster](https://rspatial.org/raster/), [stars](https://r-spatial.github.io/stars/) | Spatial and raster support |
+| [rpart](https://cran.r-project.org/package=rpart) | Decision tree in Surface Water Mapping |
+| [ggplot2](https://ggplot2.tidyverse.org/) | Plots from Seismic Line Disturbance Analysis |
+
+`parallel`, `tools` and `grDevices` are also used; they ship with R.
+
+#### References
+
+Methods and software the tools are built on. To cite an R package, run `citation("<package>")` in R.
+
+- Chan, Dabros & McDermid (2026). Microtopographic and Hydrological Response to Repeated Seismic Line
+  Disturbance in a Boreal Fen of Northern Alberta, Canada. *Forests* 17, 489.
+  [doi:10.3390/f17040489](https://doi.org/10.3390/f17040489). Surface Water Mapping,
+  Depth-to-Water and Seismic Line Disturbance Analysis.
+- Rahman, McDermid, Strack & Lovitt (2017). A New Method to Map Groundwater Table in Peatlands Using
+  Unmanned Aerial Vehicles. *Remote Sensing* 9(10), 1057.
+  [doi:10.3390/rs9101057](https://doi.org/10.3390/rs9101057). Depth-to-Water.
+- Zhang, Qi, Wan, Wang, Xie, Wang & Yan (2016). An Easy-to-Use Airborne LiDAR Data Filtering Method
+  Based on Cloth Simulation. *Remote Sensing* 8(6), 501.
+  [doi:10.3390/rs8060501](https://doi.org/10.3390/rs8060501). Ground Classify Using CSF.
+- Khosravipour, Skidmore, Isenburg, Wang & Hussin (2014). Generating Pit-free Canopy Height Models
+  from Airborne Lidar. *Photogrammetric Engineering & Remote Sensing* 80(9), 863–872.
+  [doi:10.14358/PERS.80.9.863](https://doi.org/10.14358/PERS.80.9.863). The `pitfree` CHM style.
+- Roussel, Auty, Coops, Tompalski, Goodbody, Meador, Bourdon, de Boissieu & Achim (2020). lidR: An R
+  package for analysis of Airborne Laser Scanning (ALS) data. *Remote Sensing of Environment* 251,
+  112061. [doi:10.1016/j.rse.2020.112061](https://doi.org/10.1016/j.rse.2020.112061).
+- Pebesma (2004). Multivariable geostatistics in S: the gstat package. *Computers & Geosciences*
+  30(7), 683–691. [doi:10.1016/j.cageo.2004.03.012](https://doi.org/10.1016/j.cageo.2004.03.012).
+- Pebesma (2018). Simple Features for R: Standardized Support for Spatial Vector Data. *The R
+  Journal* 10(1), 439–446. [doi:10.32614/RJ-2018-009](https://doi.org/10.32614/RJ-2018-009).
+- Hijmans. terra: Spatial Data Analysis. R package,
+  [cran.r-project.org/package=terra](https://cran.r-project.org/package=terra).
+- Therneau & Atkinson. rpart: Recursive Partitioning and Regression Trees. R package,
+  [cran.r-project.org/package=rpart](https://cran.r-project.org/package=rpart).
+- Wickham (2016). *ggplot2: Elegant Graphics for Data Analysis*. Springer-Verlag New York.
 
 #### How R is located
 
