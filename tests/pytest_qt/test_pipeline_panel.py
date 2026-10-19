@@ -17,6 +17,7 @@ pytestmark = pytest.mark.gui_qt
 CSF = "Ground Classify Using CSF"
 DTM = "Generate DTM from LiDAR Data"
 INFO = "LiDAR data info"
+NORM = "Normalize LiDAR Data"
 HH = "Detect Hummock and Hollow from LiDAR Data"
 SEISMIC = "Seismic Line Disturbance Analysis"
 
@@ -80,6 +81,23 @@ def test_move_and_remove_steps(panel):
     assert [s["tool_api"] for s in panel.steps] == ["rpy_las_info", "rpy_dtm_by"]
     # links to the removed step are dropped
     assert all(s["links"] == {} for s in panel.steps)
+
+
+def test_insert_and_move_relink_steps(panel):
+    panel.add_tool(CSF)
+    panel.add_tool(DTM)
+    panel.add_tool(INFO, row=1)  # doesn't produce LiDAR, so DTM still reads CSF
+    csf, info, dtm = panel.steps
+    assert dtm["links"] == {"in_las_folder": csf["id"]}
+
+    panel.add_tool(NORM, row=1)  # DTM now reads the normalized tiles
+    norm = panel.steps[1]
+    assert norm["links"] == {"in_las_folder": csf["id"]}
+    assert info["links"] == dtm["links"] == {"in_las_folder": norm["id"]}
+
+    panel.move_step(1, 4)  # normalize last: the others read CSF again
+    assert [s["tool_api"] for s in panel.steps] == ["rpy_gnd_csf", "rpy_las_info", "rpy_dtm_by", "rpy_normalized_PC"]
+    assert info["links"] == dtm["links"] == norm["links"] == {"in_las_folder": csf["id"]}
 
 
 def test_link_combo_unlinks_step(panel, qtbot):

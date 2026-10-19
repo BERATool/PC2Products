@@ -78,6 +78,20 @@ def test_default_links_pick_latest_matching_step():
     }
 
 
+def test_relink_follows_step_order():
+    csf = pipeline.new_step("rpy_gnd_csf")
+    chm = pipeline.new_step("rpy_CHM_DSM_by", links={"in_las_folder": csf["id"]})
+    norm = pipeline.new_step("rpy_normalized_PC")
+    pipeline.relink([csf, norm, chm])
+    assert csf["links"] == {}
+    assert norm["links"] == {"in_las_folder": csf["id"]}
+    assert chm["links"] == {"in_las_folder": norm["id"]}
+
+    pipeline.relink([chm, csf, norm])
+    assert chm["links"] == {}
+    assert norm["links"] == {"in_las_folder": csf["id"]}
+
+
 def test_validate_pipeline_reports_bad_links():
     assert pipeline.validate_pipeline([]) == ["The pipeline has no steps."]
     assert pipeline.validate_pipeline(_steps()) == []

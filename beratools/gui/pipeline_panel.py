@@ -234,8 +234,8 @@ class PipelinePanel(QtWidgets.QWidget):
             return
         if row is None or row > len(self.steps):
             row = len(self.steps)
-        links = pipeline.default_links(self.steps[:row], tool_api)
-        self.steps.insert(row, pipeline.new_step(tool_api, links=links))
+        self.steps.insert(row, pipeline.new_step(tool_api))
+        pipeline.relink(self.steps)
         self.refresh(row)
 
     def move_step(self, from_row, to_row):
@@ -246,6 +246,7 @@ class PipelinePanel(QtWidgets.QWidget):
             to_row -= 1
         to_row = min(to_row, len(self.steps))
         self.steps.insert(to_row, step)
+        pipeline.relink(self.steps)
         self.refresh(to_row)
 
     def remove_step(self):

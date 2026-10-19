@@ -95,6 +95,12 @@ def default_links(steps, tool_api):
     return links
 
 
+def relink(steps):
+    """Reset every step's links to the defaults for its place in the list, e.g. after inserting or moving a step."""
+    for i, step in enumerate(steps):
+        step["links"] = default_links(steps[:i], step["tool_api"])
+
+
 def validate_pipeline(steps):
     """Return a list of problems with the step links; empty when the pipeline can run."""
     errors = []

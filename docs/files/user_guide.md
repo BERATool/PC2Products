@@ -106,8 +106,9 @@ after another, without writing a script.
       step that makes it. When the pipeline runs, the step reads that step's `Merged_*` mosaic, or its
       single-tile raster if there is only one tile.
 
-    New steps link to the latest matching step automatically. Linked fields are greyed out in the
-    form and show what they will read, for example `D:/rasters/Merged_*_DTM.tif`. Choose
+    Each input links to the latest earlier step that makes what it needs, and the links are reset
+    this way whenever a step is added or moved, replacing any you chose by hand. Linked fields are
+    greyed out in the form and show what they will read, for example `D:/rasters/Merged_*_DTM.tif`. Choose
     **Its own value** to use the path in the form instead. The list shows each step's links, for
     example `4. Seismic Line Disturbance Analysis ← steps 2, 3`.
 4. **Run**: click **Run Pipeline**. The steps run in order with the CPU cores set by the slider, and
