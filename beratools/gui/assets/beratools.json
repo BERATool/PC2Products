@@ -13,7 +13,7 @@
                       "tool_api": "rpy_las_info",
                       "paramFile": "\\Scripts\\rpy_las_info_params.txt",
                       "image": "",
-                      "tech_link": "https://forest-line-mapper.readthedocs.io/en/latest/Tools/Auxiliary/xxx.html",
+                      "tech_link": "https://appliedgrg.github.io/PC2Products/user/las_info/",
                       "parameters": [
                           {
                               "variable": "in_las_folder",
@@ -36,7 +36,7 @@
                       "tool_api": "rpy_find_cellsize",
                       "paramFile": "\\Scripts\\rpy_find_cellsize_params.txt",
                       "image": "",
-                      "tech_link": "https://forest-line-mapper.readthedocs.io/en/latest/Tools/Auxiliary/xxx.html",
+                      "tech_link": "https://appliedgrg.github.io/PC2Products/user/cellsize/",
                       "parameters": [
                           {
                               "variable": "in_las_folder",
@@ -58,7 +58,7 @@
                     "tool_type": "python",
                     "tool_api": "rpy_gnd_csf",
                     "image": "",
-                    "tech_link": "https://forest-line-mapper.readthedocs.io/en/latest/Tools/Auxiliary/xxx.html",
+                    "tech_link": "https://appliedgrg.github.io/PC2Products/user/gnd_csf/",
                     "parameters": [
                         {
                             "variable": "in_las_folder",
@@ -131,7 +131,7 @@
                       "tool_type": "python",
                       "tool_api": "rpy_normalized_PC",
                       "icon": "",
-                      "tech_link": "https://forest-line-mapper.readthedocs.io/en/latest/Tools/Auxiliary/xxx.html",
+                      "tech_link": "https://appliedgrg.github.io/PC2Products/user/normalize/",
                       "parameters": [
                         {
                             "variable": "in_las_folder",
@@ -175,7 +175,7 @@
                       "tool_type": "python",
                       "tool_api": "rpy_dtm_by",
                       "icon": "",
-                      "tech_link": "https://forest-line-mapper.readthedocs.io/en/latest/Tools/Auxiliary/xxx.html",
+                      "tech_link": "https://appliedgrg.github.io/PC2Products/user/dtm/",
                       "parameters": [
                         {
                             "variable": "in_las_folder",
@@ -228,7 +228,7 @@
                       "tool_type": "python",
                       "tool_api": "rpy_CHM_DSM_by",
                       "icon": "",
-                      "tech_link": "https://forest-line-mapper.readthedocs.io/en/latest/Tools/Auxiliary/xxx.html",
+                      "tech_link": "https://appliedgrg.github.io/PC2Products/user/chm_dsm/",
                       "parameters": [
                         {
                             "variable": "in_las_folder",
@@ -281,7 +281,7 @@
                       "tool_type": "python",
                       "tool_api": "rpy_PC2hummock_hollow",
                       "icon": "",
-                      "tech_link": "https://forest-line-mapper.readthedocs.io/en/latest/Tools/Auxiliary/xxx.html",
+                      "tech_link": "https://appliedgrg.github.io/PC2Products/user/hummock_hollow/",
                       "parameters": [
                         {
                             "variable": "in_las_folder",
@@ -352,7 +352,7 @@
                       "tool_type": "python",
                       "tool_api": "rpy_surface_water",
                       "icon": "",
-                      "tech_link": "https://doi.org/10.3390/f17040489",
+                      "tech_link": "https://appliedgrg.github.io/PC2Products/user/surface_water/",
                       "parameters": [
                           {
                               "variable": "in_ortho",
@@ -455,7 +455,7 @@
                       "tool_type": "python",
                       "tool_api": "rpy_dtw",
                       "icon": "",
-                      "tech_link": "https://doi.org/10.3390/f17040489",
+                      "tech_link": "https://appliedgrg.github.io/PC2Products/user/dtw/",
                       "parameters": [
                           {
                               "variable": "in_dtm",
@@ -560,7 +560,7 @@
                       "tool_type": "python",
                       "tool_api": "rpy_seismic_line_analysis",
                       "icon": "",
-                      "tech_link": "https://doi.org/10.3390/f17040489",
+                      "tech_link": "https://appliedgrg.github.io/PC2Products/user/seismic_line_analysis/",
                       "parameters": [
                           {
                               "variable": "in_segments",
