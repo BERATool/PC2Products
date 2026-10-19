@@ -8,7 +8,7 @@ Author: Richard Zeng
 
 Description:
     This script is part of the BERA Tools.
-    Webpage: https://github.com/appliedgrg/beratools
+    Webpage: https://github.com/BERATool/PC2Products
 
     The purpose of this script is to provide main interface for GUI related settings.
 """
@@ -102,7 +102,7 @@ def _iter_beratools_distributions():
             dist_name = (dist.metadata.get("Name") or "").strip().lower()
         except Exception:
             dist_name = ""
-        if dist_name in ("pc2products", "beratools"):
+        if dist_name in ("beratools-pc2products", "pc2products", "beratools"):
             yield dist
 
 
@@ -149,7 +149,7 @@ def _resolve_metadata_version():
         return winner["raw_version"]
 
     try:
-        return importlib_metadata.version("PC2Products")
+        return importlib_metadata.version("beratools-pc2products")
     except Exception:
         return None
 

@@ -3,7 +3,7 @@ requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
-name = "PC2Products"
+name = "beratools-pc2products"
 dynamic = ["version"]
 description = "Point Cloud to Products: BERA Tools for turning LiDAR point clouds into DTM, DSM, CHM and hummock/hollow rasters"
 requires-python = ">=3.12,<3.15"

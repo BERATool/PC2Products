@@ -9,7 +9,7 @@ Author: Maverick Fong
 Description:
     This script is helper tools for execute the R scripts.
 
-    Webpage: https://github.com/appliedgrg/beratools
+    Webpage: https://github.com/BERATool/PC2Products
 
 """
 

@@ -63,7 +63,7 @@ rpy2 = "*"
 
 [pypi-dependencies]
 hatch-vcs = "*"
-pc2products = { path = ".", editable = true }
+beratools-pc2products = { path = ".", editable = true }
 zensical = "==0.0.53"
 mkdocstrings = "*"
 mkdocstrings-python = "*"

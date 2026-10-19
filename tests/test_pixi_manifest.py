@@ -8,7 +8,7 @@ def test_pixi_environment_installs_project_and_docs_dependencies():
         manifest = tomllib.load(manifest_file)
 
     pypi_dependencies = manifest["pypi-dependencies"]
-    assert pypi_dependencies["pc2products"] == {"path": ".", "editable": True}
+    assert pypi_dependencies["beratools-pc2products"] == {"path": ".", "editable": True}
     assert {
         "zensical",
         "mkdocstrings",

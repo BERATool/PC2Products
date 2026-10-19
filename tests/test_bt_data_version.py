@@ -8,7 +8,7 @@ class _FakeDist:
     def __init__(self, version, path):
         self.version = version
         self._path = path
-        self.metadata = {"Name": "PC2Products"}
+        self.metadata = {"Name": "beratools-pc2products"}
 
 
 def test_get_app_version_info_prefers_metadata(monkeypatch):
