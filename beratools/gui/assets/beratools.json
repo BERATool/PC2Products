@@ -17,6 +17,7 @@
                       "parameters": [
                           {
                               "variable": "in_las_folder",
+                              "accepts": "las",
                               "label": "Input folder",
                               "description": "Input LiDAR point cloud folder.",
                               "type": "directory",
@@ -39,6 +40,7 @@
                       "parameters": [
                           {
                               "variable": "in_las_folder",
+                              "accepts": "las",
                               "label": "Input folder",
                               "description": "Input LiDAR point cloud folder.",
                               "type": "directory",
@@ -60,6 +62,7 @@
                     "parameters": [
                         {
                             "variable": "in_las_folder",
+                            "accepts": "las",
                             "label": "Input LiDAR point cloud folder.",
                             "description": "Input LiDAR point cloud folder.",
                             "type": "directory",
@@ -70,6 +73,7 @@
                         },
                         {
                             "variable": "out_folder",
+                            "produces": {"las": []},
                             "label": "Output folder for the classified results data.",
                             "description": "Output folder for the ground classified results data.",
                             "type": "directory",
@@ -131,6 +135,7 @@
                       "parameters": [
                         {
                             "variable": "in_las_folder",
+                            "accepts": "las",
                             "label": "Input LiDAR folder",
                             "description": "Input LiDAR point cloud folder.",
                             "type": "directory",
@@ -141,6 +146,7 @@
                           },
                           {
                               "variable": "out_folder",
+                              "produces": {"las": []},
                               "label": "Products Output folder",
                               "description": "Output folder for the DSM raster results.",
                               "type": "directory",
@@ -173,6 +179,7 @@
                       "parameters": [
                         {
                             "variable": "in_las_folder",
+                            "accepts": "las",
                             "label": "Input LiDAR folder",
                             "description": "Input LiDAR point cloud folder.",
                             "type": "directory",
@@ -183,6 +190,7 @@
                           },
                           {
                               "variable": "out_folder",
+                              "produces": {"dtm": ["Merged_*_DTM.tif", "*_DTM.tif"]},
                               "label": "Products Output folder",
                               "description": "Output folder for the DSM raster results.",
                               "type": "directory",
@@ -224,6 +232,7 @@
                       "parameters": [
                         {
                             "variable": "in_las_folder",
+                            "accepts": "las",
                             "label": "Input LiDAR folder",
                             "description": "Input LiDAR point cloud folder.",
                             "type": "directory",
@@ -234,6 +243,7 @@
                           },
                           {
                               "variable": "out_folder",
+                              "produces": {"chm": ["Merged_*_CHM.tif", "*_CHM.tif"], "dsm": ["Merged_*_DSM.tif", "*_DSM.tif"]},
                               "label": "Products Output folder",
                               "description": "Output folder for the DSM raster results.",
                               "type": "directory",
@@ -275,6 +285,7 @@
                       "parameters": [
                         {
                             "variable": "in_las_folder",
+                            "accepts": "las",
                             "label": "Input LiDAR folder",
                             "description": "Input LiDAR point cloud folder.",
                             "type": "directory",
@@ -285,6 +296,7 @@
                           },
                           {
                               "variable": "out_folder",
+                              "produces": {"microform": ["Merged_HH_*.tif", "HH_*.tif"]},
                               "label": "Products Output folder",
                               "description": "Output folder for the DSM raster results.",
                               "type": "directory",
@@ -364,6 +376,7 @@
                           },
                           {
                               "variable": "out_folder",
+                              "produces": {"water": ["surface_water.tif"]},
                               "label": "Output folder",
                               "description": "Folder for surface_water.tif (1 water, 0 not water) and the cross-validation tables.",
                               "type": "directory",
@@ -374,6 +387,7 @@
                           },
                           {
                               "variable": "in_chm",
+                              "accepts": "chm",
                               "label": "Canopy height model",
                               "description": "Optional CHM; cells with canopy taller than the maximum canopy height cannot be water.",
                               "type": "file",
@@ -445,6 +459,7 @@
                       "parameters": [
                           {
                               "variable": "in_dtm",
+                              "accepts": "dtm",
                               "label": "DTM raster",
                               "description": "Digital terrain model, e.g. from Generate DTM from LiDAR Data. The water table and DTW are produced on its grid.",
                               "type": "file",
@@ -455,6 +470,7 @@
                           },
                           {
                               "variable": "in_water",
+                              "accepts": "water",
                               "label": "Surface water raster",
                               "description": "Raster with 1 for surface water, e.g. surface_water.tif from Surface Water Mapping. Resampled to the DTM grid if needed.",
                               "type": "file",
@@ -465,6 +481,7 @@
                           },
                           {
                               "variable": "out_folder",
+                              "produces": {"dtw": ["dtw.tif"]},
                               "label": "Output folder",
                               "description": "Folder for water_table.tif, dtw.tif and the variogram and cross-validation outputs.",
                               "type": "directory",
@@ -557,6 +574,7 @@
                           },
                           {
                               "variable": "in_dtm",
+                              "accepts": "dtm",
                               "label": "DTM raster",
                               "description": "Digital terrain model, e.g. from Generate DTM from LiDAR Data.",
                               "type": "file",
@@ -567,6 +585,7 @@
                           },
                           {
                               "variable": "in_microform",
+                              "accepts": "microform",
                               "label": "Microform raster",
                               "description": "Hummock (1), lawn (0) and hollow (-1) raster, e.g. the HH_ output of Detect Hummock and Hollow from LiDAR Data.",
                               "type": "file",
@@ -587,6 +606,7 @@
                           },
                           {
                               "variable": "in_dtw",
+                              "accepts": "dtw",
                               "label": "Depth-to-water raster",
                               "description": "Depth-to-water raster in metres, with 0 marking surface water. Leave empty to skip the depth-to-water and surface water analyses.",
                               "type": "file",

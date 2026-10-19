@@ -722,6 +722,30 @@ The rasters (`Merged_*_DTM.tif`, `Merged_*_DSM.tif` and `Merged_*_CHM.tif`, plus
 are written to `OUT_FOLDER/Raster_Output/`. The pipeline needs no extra packages, and `run_pipeline()`
 can also be imported and called from Python with the same arguments.
 
+#### Building your own pipeline in the GUI
+
+The **Pipeline** tab (next to **Tool history**) lets you chain tools without writing code:
+
+1. Drag tools from **Tools available** into the Pipeline tab (dragging over the tab switches to it), or
+   select a tool and click the add button. Drag steps, or use the arrow buttons, to reorder them.
+2. Click a step to edit its parameters in the tool form; the changes are kept in the step.
+3. **Inputs from earlier steps** links a step's inputs to earlier steps' outputs, with one choice per
+   input. A LiDAR folder can come from **Ground Classify Using CSF** or **Normalize LiDAR Data**, and a
+   raster such as `in_dtm` or `in_microform` from the step that makes it; at run time it reads that
+   step's `Merged_*` mosaic (or its single-tile raster). New steps link to the latest matching step
+   automatically; choose **Its own value** to use the path in the form instead. Which inputs and
+   outputs match is set by `accepts` and `produces` in `beratools.json` (see
+   [Add a new tool](docs/files/developer/add_new_tool.md)), so new tools join in without code changes.
+4. Click **Run Pipeline**. The steps run one after another with the CPU cores set by the slider, and
+   the pipeline stops if a step fails or you click **Cancel**.
+
+Save and load pipelines as `.json` files with the buttons above the list. A saved pipeline can also run
+without the GUI:
+
+```bash
+python -m beratools.core.pipeline my_pipeline.json --processes 4
+```
+
 ---
 
 ### Requirements

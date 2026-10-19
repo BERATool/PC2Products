@@ -87,6 +87,28 @@ class ToolWidgets(QtWidgets.QWidget):
 
         return args
 
+    def get_widgets_values(self):
+        """Return the current values, including empty ones, without checking for missing arguments."""
+        values = {}
+        for widget in self.widget_list:
+            value = widget.get_value() if widget else None
+            if isinstance(value, dict):
+                values.update(value)
+        return values
+
+    def connect_value_changed(self, callback):
+        """Call callback whenever any parameter value changes."""
+        for widget in self.widget_list:
+            if isinstance(widget, BooleanInput):
+                widget.checkbox.stateChanged.connect(callback)
+            elif isinstance(widget, OptionsInput):
+                widget.combobox.currentIndexChanged.connect(callback)
+            elif isinstance(widget, NumericInput) and widget.data_input is not None:
+                widget.data_input.valueChanged.connect(callback)
+            elif isinstance(widget, FileSelector):
+                widget.in_file.textChanged.connect(callback)
+                widget.layer_combo.currentTextChanged.connect(callback)
+
     def create_widgets(self, tool_args):
         valid_types = {"number", "file", "list", "text", "directory"}
         for p in tool_args:

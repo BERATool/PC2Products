@@ -69,6 +69,26 @@ At minimum, define:
 `tool_api` must match the module name and the string passed to `compose_tool_kwargs`, or the tool
 stops with `Tool API '<name>' not found in beratools.json`.
 
+### Taking part in pipelines
+
+Every registered `python` tool can be a step in a GUI pipeline. To let its inputs be linked to an
+earlier step's output, tag the parameters with a *kind*:
+
+- an input parameter gets `"accepts": "<kind>"`;
+- an output parameter gets `"produces": {"<kind>": [patterns]}`. An empty list means the output
+  folder itself (a folder of point clouds); otherwise the pipeline uses the first glob pattern that
+  matches files in the output folder, newest file first.
+
+```json
+{"variable": "in_dtm", "accepts": "dtm", ...}
+{"variable": "out_folder", "produces": {"dtm": ["Merged_*_DTM.tif", "*_DTM.tif"]}, ...}
+```
+
+The kinds in use are `las`, `dtm`, `dsm`, `chm`, `microform`, `water` and `dtw`; add a new one when a
+tool writes something new. `tests/test_pipeline.py` checks that every accepted kind has a producer.
+For the pipeline to stop when your tool fails, exit with a non-zero code (`sys.exit(1)` or an
+uncaught exception), not a plain `exit()`.
+
 ## 4) Add the `bt` subcommand
 
 In `beratools/cli/entry.py`:
