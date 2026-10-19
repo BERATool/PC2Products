@@ -7,7 +7,6 @@ channels:
   - defaults
 dependencies:
   - python>3.11
-  - dask
   - gdal>=3.12,<4
   - geopandas
   - networkit
@@ -16,11 +15,8 @@ dependencies:
   - pyogrio>=0.12
   - pyqt
   - rasterio>=1.5
-  - scikit-image>=0.24.0
   - tqdm
   - xarray-spatial
-  - pandarallel
-  - tabulate
   - igraph
   - psutil
   - hydra-core

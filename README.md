@@ -785,7 +785,6 @@ install into the environment's R the first time they need them (see
 | [igraph](https://python.igraph.org/), [networkit](https://networkit.github.io/), [NetworkX](https://networkx.org/) | Graph operations in the bundled polygon centerline code |
 | [tqdm](https://tqdm.github.io/) | Progress bars |
 | [packaging](https://packaging.pypa.io/) | Comparing version numbers when resolving the app version |
-| [dask](https://www.dask.org/), [pandarallel](https://nalepae.github.io/pandarallel/), [scikit-image](https://scikit-image.org/), [tabulate](https://github.com/astanin/python-tabulate), [pyarrow](https://arrow.apache.org/docs/python/) | BERA Tools framework dependencies, kept so the shared code runs unchanged |
 | [Hydra](https://hydra.cc/) (`hydra-core`, `omegaconf`) | The [example workflow](#example-workflow) |
 | [pytest](https://pytest.org/), [pytest-qt](https://pytest-qt.readthedocs.io/), [pytest-cov](https://pytest-cov.readthedocs.io/), [pywinauto](https://pywinauto.readthedocs.io/) | Tests (pywinauto only for the Windows GUI automation) |
 | [Zensical](https://zensical.org/), [mkdocstrings](https://mkdocstrings.github.io/), [PyMdown Extensions](https://facelessuser.github.io/pymdown-extensions/) | Building the documentation |

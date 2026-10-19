@@ -38,7 +38,6 @@ jobs:
           environment-name: bera-tox
           create-args: >-
             python=${{ matrix.python-version }}
-            dask
             gdal>=3.12,<4
             geopandas
             ${{ matrix.networkit }}
@@ -47,12 +46,9 @@ jobs:
             pyogrio>=0.12
             pyqt
             rasterio>=1.5
-            scikit-image>=0.24
             tqdm
             xarray-spatial
-            pandarallel
             igraph
-            tabulate
             psutil
             hydra-core
             pytest
