@@ -22,6 +22,8 @@ The **[PC2Products Guide](https://appliedgrg.github.io/PC2Products/)** covers ea
 - [Overview of the tools](https://appliedgrg.github.io/PC2Products/overview/), with links to a page per tool
 - [Technical Guide](https://appliedgrg.github.io/PC2Products/technical_guide/): how the tools run and how R is located
 
+In the GUI, a tool's **Tool Help** button opens its page in the guide.
+
 To build the site locally, run `pixi run zensical build -f docs/mkdocs.yml` (output in `docs/site/`), or
 `pixi run zensical serve -f docs/mkdocs.yml` to preview it.
 
@@ -456,6 +458,10 @@ rpy_surface_water(in_ortho="ortho.tif", in_training="training.gpkg|training",
 1.5 m of canopy, so the CHM mask removes it. A single water-coloured cell at the top right is also
 removed, because it is smaller than `min_patch_area`.*
 
+**Reference:** Chan, Dabros & McDermid (2026),
+[*Microtopographic and Hydrological Response to Repeated Seismic Line Disturbance in a Boreal Fen of
+Northern Alberta, Canada*](https://doi.org/10.3390/f17040489), *Forests* 17, 489.
+
 ### Depth-to-Water from Surface Water
 
 Estimates the water table and depth to water (DTW), following section 2.4 of Chan, Dabros & McDermid
@@ -517,6 +523,10 @@ rpy_dtw(in_dtm="dtm.tif", in_water="surface_water/surface_water.tif",
 *The synthetic test DTM and pools from `make_dtw_data` in `tests/conftest.py`, kriged on the DTM
 grid. Each black dot is one 10 m cell's water point. DTW is `0` on the pools and blank inside the
 exclusion polygon.*
+
+**Reference:** Chan, Dabros & McDermid (2026),
+[*Microtopographic and Hydrological Response to Repeated Seismic Line Disturbance in a Boreal Fen of
+Northern Alberta, Canada*](https://doi.org/10.3390/f17040489), *Forests* 17, 489.
 
 ### Seismic Line Disturbance Analysis
 
