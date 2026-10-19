@@ -253,9 +253,8 @@ class PipelinePanel(QtWidgets.QWidget):
         row = self.list_widget.currentRow()
         if not 0 <= row < len(self.steps):
             return
-        removed = self.steps.pop(row)
-        for step in self.steps:
-            step["links"] = {v: s for v, s in step["links"].items() if s != removed["id"]}
+        self.steps.pop(row)
+        pipeline.relink(self.steps)
         self.refresh(row)
 
     def clear_steps(self):

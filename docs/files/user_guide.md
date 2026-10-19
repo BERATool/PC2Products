@@ -107,7 +107,7 @@ after another, without writing a script.
       single-tile raster if there is only one tile.
 
     Each input links to the latest earlier step that makes what it needs, and the links are reset
-    this way whenever a step is added or moved, replacing any you chose by hand. Linked fields are
+    this way whenever a step is added, moved or removed, replacing any you chose by hand. Linked fields are
     greyed out in the form and show what they will read, for example `D:/rasters/Merged_*_DTM.tif`. Choose
     **Its own value** to use the path in the form instead. The list shows each step's links, for
     example `4. Seismic Line Disturbance Analysis ← steps 2, 3`.

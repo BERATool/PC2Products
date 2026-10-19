@@ -83,6 +83,17 @@ def test_move_and_remove_steps(panel):
     assert all(s["links"] == {} for s in panel.steps)
 
 
+def test_remove_relinks_to_earlier_step(panel):
+    panel.add_tool(CSF)
+    panel.add_tool(NORM)
+    panel.add_tool(DTM)
+    assert panel.steps[2]["links"] == {"in_las_folder": panel.steps[1]["id"]}
+
+    panel.list_widget.setCurrentRow(1)
+    panel.remove_step()
+    assert panel.steps[1]["links"] == {"in_las_folder": panel.steps[0]["id"]}
+
+
 def test_insert_and_move_relink_steps(panel):
     panel.add_tool(CSF)
     panel.add_tool(DTM)

@@ -96,7 +96,10 @@ def default_links(steps, tool_api):
 
 
 def relink(steps):
-    """Reset every step's links to the defaults for its place in the list, e.g. after inserting or moving a step."""
+    """Reset every step's links to the defaults for its place in the list.
+
+    Called after adding, moving or removing a step.
+    """
     for i, step in enumerate(steps):
         step["links"] = default_links(steps[:i], step["tool_api"])
 
