@@ -691,6 +691,37 @@ python examples/full_workflow.py steps_to_run=[dtm,chm_dsm] args_chm_dsm.style=p
 Run it from the repository root, because the default paths are relative to it. See
 [examples/README.md](examples/README.md) for the folder settings, all the steps and the outputs.
 
+#### DTM, DSM and CHM pipeline
+
+`examples/pc2products_pipeline.py` turns a folder of tiles into DTM, DSM and CHM rasters, and checks the
+data first so it only runs the steps it needs:
+
+1. **Ground classified?** If any tile has no ground points (class 2), it runs
+   [Ground Classify Using CSF](#ground-classify-using-csf) into `OUT_FOLDER/Classified_PC/`; otherwise it
+   uses the input tiles as they are.
+2. **DTM**: [Generate DTM from LiDAR Data](#generate-dtm-from-lidar-data) from the ground-classified
+   tiles.
+3. **Normalized?** If not, it builds a DSM from the ground-classified tiles,
+   [normalizes](#normalize-lidar-data) them into `OUT_FOLDER/Normalized_PC/`, and builds the CHM from the
+   normalized tiles. If the data is already normalized, no DSM can be made, so it builds the CHM straight
+   away (and warns that the DTM will be flat, at about 0 m).
+
+```bash
+python examples/pc2products_pipeline.py tests/data/LiDAR D:/my_output
+python examples/pc2products_pipeline.py D:/my_data/LiDAR D:/my_output --processes 4 --style kriging
+```
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `--processes` | `0` | Worker processes (`0` = all CPU cores). |
+| `--style` | `tin` | Interpolation. `tin`, `idw` and `kriging` apply to the DTM and normalization, `tin` and `pitfree` to the DSM and CHM; a style that doesn't apply to a step falls back to `tin` for it. |
+| `--cell-size` | `0.0` | Raster cell size (`0` = estimate from the data). |
+| `--slope`, `--class-threshold`, `--cloth-resolution`, `--rigidness` | off, `0.3`, `1.0`, `1` | CSF settings, used only when the data needs classifying. |
+
+The rasters (`Merged_*_DTM.tif`, `Merged_*_DSM.tif` and `Merged_*_CHM.tif`, plus the per-tile rasters)
+are written to `OUT_FOLDER/Raster_Output/`. The pipeline needs no extra packages, and `run_pipeline()`
+can also be imported and called from Python with the same arguments.
+
 ---
 
 ### Requirements

@@ -1,3 +1,8 @@
+# Examples
+
+- [Full Workflow (Hydra)](#full-workflow-example-hydra): `full_workflow.py` + `config.yaml`, runs a configurable list of steps.
+- [DTM, DSM and CHM Pipeline](#dtm-dsm-and-chm-pipeline): `pc2products_pipeline.py`, checks the data and runs only the steps it needs.
+
 # Full Workflow Example (Hydra)
 
 This folder contains a [Hydra](https://hydra.cc/)-driven example that runs the PC2Products tools in
@@ -90,3 +95,50 @@ With the default `style: tin` and `Smooth_by: median`, `Min_ws: 3.0`:
     `Merged_CHH_median_3m.tif` and `Merged_HH_median_3m.tif`
 
 Hydra also writes its run log and resolved config to `outputs/<date>/<time>/` in the current folder.
+
+# DTM, DSM and CHM Pipeline
+
+`pc2products_pipeline.py` is a plain `argparse` script (no Hydra) that builds DTM, DSM and CHM rasters
+and checks the data first, so it skips the steps the data doesn't need:
+
+```text
+1. Ground classified?  no  -> classify ground with CSF
+2. Generate DTM from the ground-classified tiles
+3. Normalized?         no  -> generate DSM, normalize the tiles, then generate CHM
+                       yes -> generate CHM straight away (the DTM will be flat, ~0 m)
+```
+
+## Run
+
+From the repository root:
+
+```bash
+python examples/pc2products_pipeline.py IN_LAS_FOLDER OUT_FOLDER [options]
+python examples/pc2products_pipeline.py tests/data/LiDAR D:/my_output
+python examples/pc2products_pipeline.py D:/my_data/LiDAR D:/my_output --processes 4 --style pitfree
+```
+
+## Options
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `--processes` | `0` | Worker processes (`0` = all CPU cores). |
+| `--style` | `tin` | `tin`, `idw` or `kriging` for the DTM and normalization; `tin` or `pitfree` for the DSM and CHM. A style that doesn't apply to a step falls back to `tin` for it. |
+| `--cell-size` | `0.0` | Raster cell size (`0` = estimate from the data). |
+| `--slope` | off | CSF slope post-processing for steep terrain. |
+| `--class-threshold` | `0.3` | CSF classification threshold. |
+| `--cloth-resolution` | `1.0` | CSF cloth resolution. |
+| `--rigidness` | `1` | CSF cloth rigidness (`1`, `2` or `3`). |
+
+The CSF options are used only when the input isn't ground-classified.
+
+## Output
+
+Inside `OUT_FOLDER`:
+
+- `Classified_PC/`: ground-classified tiles (only when the input wasn't classified).
+- `Normalized_PC/`: height-normalized tiles (only when the input wasn't normalized).
+- `Raster_Output/`: `Merged_*_DTM.tif`, `Merged_*_DSM.tif` (not made for normalized input) and
+  `Merged_*_CHM.tif`, plus the per-tile rasters.
+
+`run_pipeline()` can also be imported and called from Python with the same arguments.
