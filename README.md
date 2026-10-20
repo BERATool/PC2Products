@@ -13,14 +13,14 @@ R function in `r_scripts_collection.r` through [rpy2](https://rpy2.github.io/). 
 
 ### Documentation
 
-The **[PC2Products Guide](https://appliedgrg.github.io/PC2Products/)** covers each tool on its own page
+The **[PC2Products Guide](https://beratool.github.io/PC2Products/)** covers each tool on its own page
 (source in [`docs/`](docs/)):
 
-- [User Guide](https://appliedgrg.github.io/PC2Products/user_guide/): the typical workflow and how to run the tools from the GUI,
+- [User Guide](https://beratool.github.io/PC2Products/user_guide/): the typical workflow and how to run the tools from the GUI,
   the `bt` command or Python
-- [Installation](https://appliedgrg.github.io/PC2Products/user/installation/)
-- [Overview of the tools](https://appliedgrg.github.io/PC2Products/overview/), with links to a page per tool
-- [Technical Guide](https://appliedgrg.github.io/PC2Products/technical_guide/): how the tools run and how R is located
+- [Installation](https://beratool.github.io/PC2Products/user/installation/)
+- [Overview of the tools](https://beratool.github.io/PC2Products/overview/), with links to a page per tool
+- [Technical Guide](https://beratool.github.io/PC2Products/technical_guide/): how the tools run and how R is located
 
 In the GUI, a tool's **Tool Help** button opens its page in the guide.
 
