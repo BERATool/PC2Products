@@ -260,3 +260,14 @@ def test_pipeline_stops_when_linked_file_is_missing(main_window, panel, qtbot, t
 
     assert mock_launch.call_count == 1
     assert "Pipeline stopped before step 2: Step 1 wrote no file matching" in main_window.text_edit.toPlainText()
+
+
+def test_selecting_a_step_keeps_the_panel_size(main_window, panel):
+    for tool in (CSF, DTM, NORM, HH):
+        panel.add_tool(tool)
+    sizes = set()
+    for row in range(len(panel.steps)):
+        panel.list_widget.setCurrentRow(row)
+        QtWidgets.QApplication.processEvents()
+        sizes.add((main_window.left_tabs.geometry().getRect(), main_window.tree_view.geometry().getRect()))
+    assert len(sizes) == 1
