@@ -17,7 +17,9 @@ TOOL_ALIASES = {
     "las_info": "rpy_las_info",
     "cellsize": "rpy_find_cellsize",
     "hh": "rpy_PC2hummock_hollow",
+    "lpi_elai": "rpy_lpi_elai",
     "gnd_csf": "rpy_gnd_csf",
+    "preprocess": "rpy_preprocess_lidar",
     "surface_water": "rpy_surface_water",
     "dtw": "rpy_dtw",
     "line_analysis": "rpy_seismic_line_analysis",
@@ -194,9 +196,15 @@ def _resolve_tool_function(tool_api: str):
     if tool_api == 'rpy_PC2hummock_hollow':
         from beratools.tools.rpy_PC2hummock_hollow import rpy_hh2raster
         return rpy_hh2raster
+    if tool_api == 'rpy_lpi_elai':
+        from beratools.tools.rpy_lpi_elai import rpy_lpi_elai
+        return rpy_lpi_elai
     if tool_api == 'rpy_gnd_csf':
         from beratools.tools.rpy_gnd_csf import rpy_gnd_csf
         return rpy_gnd_csf
+    if tool_api == 'rpy_preprocess_lidar':
+        from beratools.tools.rpy_preprocess_lidar import rpy_preprocess_lidar
+        return rpy_preprocess_lidar
     if tool_api == 'rpy_surface_water':
         from beratools.tools.rpy_surface_water import rpy_surface_water
         return rpy_surface_water

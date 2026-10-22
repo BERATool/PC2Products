@@ -2,7 +2,7 @@ import pytest
 
 from beratools.cli import entry
 
-ALL_ALIASES = ["dtm", "normalize", "chm_dsm", "las_info", "cellsize", "hh", "gnd_csf", "surface_water", "dtw", "line_analysis"]
+ALL_ALIASES = ["dtm", "normalize", "chm_dsm", "las_info", "cellsize", "hh", "lpi_elai", "gnd_csf", "preprocess", "surface_water", "dtw", "line_analysis"]
 
 
 @pytest.fixture

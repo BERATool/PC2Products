@@ -1516,3 +1516,248 @@ normalized_lidar_kriging <- function(in_las_folder, out_folder, rprocesses) {
 }
 
 #########################################################################################
+# Chunking of large LiDAR files, shared by lpi_counts and preprocess_lidar
+# Each file is processed as one chunk unless a file holds more than max_file_points points:
+# then the catalog is split into square chunks of about chunk_points points, so that a large
+# file (e.g. one per drone flight) fits in a worker's memory. The chunk size comes from the
+# densest file.
+#########################################################################################
+# Highest point density among the catalog's files, per m² of the area their points cover. A
+# file's bounding box can be much larger than that (an irregular flight area, a diagonal strip),
+# which would understate the density, so the covered area is counted as the cell x cell cells
+# holding points of a thinned read of the file (about sample_points points). Cells the thinned
+# read misses make the density come out higher, which only gives smaller chunks.
+covered_point_density <- function(ctg, cell = 5, sample_points = 2e5)
+{
+    densities <- mapply(function(file, n) {
+        nth <- max(1, floor(n / sample_points))
+        xy <- readLAS(file, select = "xyz", filter = paste("-keep_every_nth", nth))@data
+        if (nrow(xy) == 0) return(0)
+        cells <- nrow(unique(data.frame(floor(xy$X / cell), floor(xy$Y / cell))))
+        n / (cells * cell^2)
+    }, ctg@data$filename, ctg@data$Number.of.point.records)
+    max(densities)
+}
+
+# Sets the chunks and the output file template of a catalog: <out_folder>/{*}<suffix> per file,
+# or {XLEFT}_{YBOTTOM}<suffix> per chunk, as chunks no longer follow the files.
+plan_catalog_chunks <- function(ctg, out_folder, suffix, max_file_points, chunk_points)
+{
+    if (max(ctg@data$Number.of.point.records) > max_file_points) {
+        density <- covered_point_density(ctg)
+        chunk_side <- max(50, round(sqrt(chunk_points / density) / 10) * 10)
+        print(paste0("Large LiDAR files (up to ", round(density), " points/m²): processing in ",
+                     chunk_side, " m x ", chunk_side, " m chunks"))
+        opt_chunk_size(ctg) <- chunk_side
+        opt_chunk_alignment(ctg) <- c(0, 0)
+        opt_output_files(ctg) <- paste0(out_folder, "/{XLEFT}_{YBOTTOM}", suffix)
+    } else {
+        opt_output_files(ctg) <- paste0(out_folder, "/{*}", suffix)
+    }
+    return(ctg)
+}
+
+#########################################################################################
+# Laser penetration index (LPI) return counts
+# Following Hegels (2023), "Characterizing solar radiation on linear disturbances in Alberta's
+# boreal forest", MSc thesis, LMU Munich, sections 4.5.2 and 4.6.2: returns are normalized to the
+# ground by k-nearest neighbour IDW and all returns up to cut_ht above it count as ground returns.
+# Each point is read once and no normalized point cloud is written. Writes one 2-band raster per
+# tile (band 1: all returns, band 2: ground returns, 0 where a cell has no returns) and a VRT of
+# them; rpy_lpi_elai.py sums them over the circular plot and computes the LPI and eLAI.
+#########################################################################################
+lpi_counts <- function(in_las_folder, out_folder, cell_size, cut_ht, is_normalized, rprocesses,
+                       max_file_points = 20e6, chunk_points = 10e6) {
+
+    library(lidR)
+    library(terra)
+    library(future)
+    library(sf)
+
+    plan(multisession, workers = max(1, floor(rprocesses / 2)))
+    on.exit(plan(sequential), add = TRUE)
+    set_lidr_threads(rprocesses)
+
+    print("Counting all and ground returns per cell...")
+    ctg <- readLAScatalog(in_las_folder, select = "xyzc", filter = "-drop_class 7")
+    cat(sprintf("R_PROGRESS:%d\n",round(0.10 * 100)))
+    flush.console()
+
+    count_returns <- function(chunk, cell_size, cut_ht, is_normalized)
+    {
+        las <- readLAS(chunk)
+        if (is.empty(las)) return(NULL)
+        if (!is_normalized) las <- normalize_height(las, algorithm = knnidw())
+
+        # flag the ground returns on the points: a formula refering to cut_ht is evaluated
+        # where cut_ht is not visible on future's workers
+        las <- add_attribute(las, las$Z <= cut_ht, "is_ground")
+        counts <- pixel_metrics(las, ~list(total = length(Z), ground = sum(is_ground)), res = cell_size)
+        # crop the buffer outwards to whole cells, so neighbouring tiles overlap rather than
+        # leave a gap; a shared cell has the same counts in both, as both see its buffered points
+        bb <- sf::st_bbox(chunk)
+        counts <- terra::crop(counts, terra::ext(bb$xmin, bb$xmax, bb$ymin, bb$ymax), snap = "out")
+        counts[is.na(counts)] <- 0
+        return(counts)
+    }
+
+    opt_chunk_buffer(ctg) <- 10
+    ctg <- plan_catalog_chunks(ctg, out_folder, "_LPI_counts", max_file_points, chunk_points)
+    ctg@output_options$drivers$SpatRaster$param$overwrite <- TRUE
+    ctg@output_options$drivers$SpatRaster$param$datatype <- "INT4U"
+    ctg@output_options$drivers$SpatRaster$param$gdal <- c("COMPRESS=DEFLATE")
+    opt_progress(ctg) <- TRUE
+    opt_stop_early(ctg) <- TRUE
+    files <- catalog_apply(ctg, count_returns, cell_size = cell_size, cut_ht = cut_ht,
+                           is_normalized = is_normalized, .options = list(need_output_file = TRUE))
+    cat(sprintf("R_PROGRESS:%d\n",round(0.50 * 100)))
+    flush.console()
+
+    files <- unlist(files)
+    files <- files[file.exists(files)]
+    if (length(files) == 0) stop("No returns found in the input LiDAR data.")
+    vrt_path <- file.path(out_folder, "LPI_counts.vrt")
+    terra::vrt(files, vrt_path, overwrite = TRUE)
+    print("Counting all and ground returns per cell...Done")
+    plan(sequential)
+    return(vrt_path)
+}
+
+#########################################################################################
+# Open-source LiDAR preprocessing after Hegels (2023), section 4.5.2 and appendix A.5
+# Her workflow used LAStools; here lidR does each step, chunk by chunk, so no LAStools licence
+# is needed. Returns beyond max_scan_angle are dropped on reading (lasnoise -keep_scan_angle).
+#   1. clip to the flight areas (lasclip), if given
+#   2. split the flight lines at GPS time gaps of flightline_gap s (lassplit) and, where flight
+#      lines overlap, keep in each overlap_step cell only the flight line seen at the smallest
+#      mean scan angle (lasoverage -remove_overage)
+#   3. drop duplicate points (lasduplicate -unique_xyz)
+#   4. classify isolated points as noise, class 7: at most noise_n other points in the 27
+#      surrounding noise_res voxels (lasnoise -isolated, by lidR's isolated voxel filter)
+#   5. homogenize to point_density pulses per m² in 1 m cells, as her R script did (0 = no)
+#   6. classify the ground by cloth simulation (lasground, whose algorithm is not open) and keep
+#      as ground only the lowest ground point per thin_step cell, the others becoming low
+#      vegetation (class 3), as sphagnum mosses are otherwise taken for the ground in wetlands
+#      (lasthin -lowest and lasclassify)
+#########################################################################################
+# Step 2: in each step x step cell covered by more than one flight line, keep the points of the
+# flight line with the smallest mean absolute scan angle
+remove_flightline_overlap <- function(las, flightline_gap, step)
+{
+    library(data.table)
+    las <- retrieve_flightlines(las, dt = flightline_gap)
+    if (length(unique(las$flightlineID)) < 2) return(las)
+    angle <- abs(if ("ScanAngle" %in% names(las@data)) las$ScanAngle else las$ScanAngleRank)
+    d <- data.table(cx = floor(las$X / step), cy = floor(las$Y / step), fl = las$flightlineID, a = angle)
+    lines <- d[, .(a = mean(a)), by = .(cx, cy, fl)]
+    best <- lines[lines[, .I[which.min(a)], by = .(cx, cy)]$V1, .(cx, cy, fl)]
+    d[, i := .I]
+    keep <- d[best, on = .(cx, cy, fl), nomatch = 0L]$i
+    las <- add_attribute(las, seq_len(npoints(las)) %in% keep, "in_best_flightline")
+    las <- filter_poi(las, in_best_flightline)
+    las@data[, in_best_flightline := NULL]
+    return(las)
+}
+
+# Step 6, after the ground classification: of the ground points in each step x step cell, only
+# the lowest stays ground, the others become low vegetation
+keep_lowest_ground <- function(las, step)
+{
+    library(data.table)
+    cls <- las$Classification
+    g <- which(cls == LASGROUND)
+    if (length(g) == 0) return(las)
+    d <- data.table(i = g, cx = floor(las$X[g] / step), cy = floor(las$Y[g] / step), z = las$Z[g])
+    lowest <- d[d[, .I[which.min(z)], by = .(cx, cy)]$V1, i]
+    cls[setdiff(g, lowest)] <- LASLOWVEGETATION
+    las$Classification <- cls
+    return(las)
+}
+
+preprocess_lidar <- function(in_las_folder, out_folder, area_path, area_layer, max_scan_angle,
+                             remove_overlap, flightline_gap, overlap_step, noise_res, noise_n,
+                             point_density, slope, class_threshold, cloth_resolution, rigidness,
+                             thin_step, rprocesses, max_file_points = 20e6, chunk_points = 10e6) {
+
+    library(lidR)
+    library(future)
+    library(sf)
+    library(RCSF)
+    library(data.table)
+
+    plan(multisession, workers = max(1, floor(rprocesses / 2)))
+    on.exit(plan(sequential), add = TRUE)
+    set_lidr_threads(rprocesses)
+
+    print("Preprocessing LiDAR data...")
+    ctg <- readLAScatalog(in_las_folder,
+                          filter = paste("-keep_scan_angle", -max_scan_angle, max_scan_angle))
+    area <- NULL
+    if (nzchar(area_path)) {
+        area <- if (nzchar(area_layer)) st_read(area_path, layer = area_layer, quiet = TRUE) else st_read(area_path, quiet = TRUE)
+        area <- st_union(st_transform(st_geometry(area), st_crs(ctg)))
+    }
+    cat(sprintf("R_PROGRESS:%d\n",round(0.10 * 100)))
+    flush.console()
+
+    preprocess_chunk <- function(chunk, area, remove_overlap, flightline_gap, overlap_step,
+                                 noise_res, noise_n, point_density, ground_algorithm, thin_step)
+    {
+        las <- readLAS(chunk)
+        if (is.empty(las)) return(NULL)
+        if (!is.null(area)) {
+            las <- clip_roi(las, area)
+            if (is.empty(las)) return(NULL)
+        }
+        has_time <- "gpstime" %in% names(las@data) && any(las$gpstime != 0)
+        if (remove_overlap && has_time) las <- remove_flightline_overlap(las, flightline_gap, overlap_step)
+        las <- filter_duplicates(las)
+
+        las <- classify_noise(las, ivf(res = noise_res, n = noise_n))
+        cls <- las$Classification
+        cls[cls == LASNOISE] <- 7L
+        las$Classification <- cls
+
+        if (point_density > 0) {
+            set.seed(1)  # homogenize() keeps random points: same input, same output
+            if (has_time) {
+                las <- retrieve_pulses(las)
+                las <- decimate_points(las, homogenize(point_density, 1, use_pulse = TRUE))
+            } else {
+                las <- decimate_points(las, homogenize(point_density, 1))
+            }
+        }
+
+        # the ground is classified without the noise points, which are added back as class 7
+        noise <- filter_poi(las, Classification == 7L)
+        las <- filter_poi(las, Classification != 7L)
+        if (!is.empty(las)) {
+            las <- classify_ground(las, ground_algorithm)
+            las <- keep_lowest_ground(las, thin_step)
+        }
+        if (!is.empty(noise)) las <- rbind(las, noise)
+        las <- filter_poi(las, buffer == 0)
+        if (is.empty(las)) return(NULL)
+        return(las)
+    }
+
+    opt_chunk_buffer(ctg) <- 15
+    ctg <- plan_catalog_chunks(ctg, out_folder, "_preprocessed", max_file_points, chunk_points)
+    opt_laz_compression(ctg) <- FALSE
+    opt_progress(ctg) <- TRUE
+    opt_stop_early(ctg) <- TRUE
+    ground_algorithm <- csf(slope, class_threshold = class_threshold, cloth_resolution = cloth_resolution,
+                            rigidness = rigidness, iterations = 500, time_step = 0.65)
+    out <- catalog_apply(ctg, preprocess_chunk, area = area, remove_overlap = remove_overlap,
+                         flightline_gap = flightline_gap, overlap_step = overlap_step,
+                         noise_res = noise_res, noise_n = noise_n, point_density = point_density,
+                         ground_algorithm = ground_algorithm, thin_step = thin_step,
+                         .options = list(need_output_file = TRUE))
+    files <- unlist(out)
+    files <- files[file.exists(files)]
+    cat(sprintf("R_PROGRESS:%d\n",round(0.99 * 100)))
+    flush.console()
+    print(paste0("Preprocessing LiDAR data...Done: ", length(files), " file(s) in ", out_folder))
+    plan(sequential)
+    return(length(files))
+}
